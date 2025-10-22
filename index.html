@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BASELINE HUAWEI</title>
+  <link rel="icon" type="image/png" href="https://i.imgur.com/S6EvitM.png">
+  <style>
+    :root{--bg:#f6f8fa;--card:#fff;--accent:#0f62fe;--muted:#666}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); margin:0; padding:24px; color:#111}
+    .container{max-width:980px;margin:0 auto;}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+    h1{font-size:20px;margin:0}
+    .card{background:var(--card);border-radius:10px;padding:16px;box-shadow:0 6px 18px rgba(18,38,63,0.06);margin-bottom:12px}
+    label{display:block;font-size:13px;margin-bottom:6px;color:var(--muted)}
+    textarea{width:97%;min-height:100px;padding:10px;border-radius:8px;border:1px solid #ddd;resize:vertical;font-family:monospace}
+    .row{display:flex;gap:12px;align-items:center}
+    .col{flex: 1 1 45%; min-width: 280px;}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    button{background:var(--accent);color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+    button.secondary{background:#e6eef9;color:#003087}
+    button.ghost{background:transparent;color:var(--muted);border:1px solid #ddd}
+    .small{font-size:13px;padding:6px 10px;border-radius:6px}
+    .meta{font-size:13px;color:var(--muted);margin-top:8px}
+    .footer{font-size:13px;color:var(--muted);text-align:center;margin-top:18px}
+    .inline{display:inline-block}
+    .count{font-weight:700;color:#0053a6;margin-left:6px}
+    .error{color:#b00020;font-weight:600}
+    @media (max-width:700px){header{flex-direction:column;align-items:flex-start}}
+  </style>
+</head>
+<body>
+	<script>
+  const senhaCorreta = "admin"; // 🔒 troque pela senha que quiser
+  const senhaDigitada = prompt("Digite a palavra-chave para acessar o site:");
+
+  if (senhaDigitada !== senhaCorreta) {
+    alert("Senha incorreta. Acesso negado.");
+    document.body.innerHTML = ""; // limpa a página
+    window.location.href = "https://google.com"; // opcional: redireciona
+  }
+</script>
+
+  <div class="container">
+    <header>
+      <h1>Baseline Huawei</h1>
+      <img src="https://i.imgur.com/S6EvitM.png" alt="RF Team by Telebit Logo" style="height: 100px; object-fit: contain;">
+    </header>
+	
+	<div class="card row" style="align-items:flex-start; flex-wrap:wrap; gap:16px;">
+		<!-- Entrada 4G -->
+		<div class="col">
+		  <label for="input4G">Entrada 4G (cada linha deve conter LOCALCELLID)</label>
+		  <textarea id="input4G" placeholder="Exemplo:&#10;101&#10;102&#10;103"></textarea>
+		  <div class="meta">Linhas válidas 4G: <span id="count4G" class="count">0</span></div>
+		</div>
+
+		<!-- Entrada 5G -->
+		<div class="col">
+		  <label for="input5G">Entrada 5G (cada linha deve conter NRCELLID / NRDUCELLID)</label>
+		  <textarea id="input5G" placeholder="Exemplo:&#10;201&#10;202&#10;203"></textarea>
+		  <div class="meta">Linhas válidas 5G: <span id="count5G" class="count">0</span></div>
+		</div>
+	</div>
+	
+    <!-- Templates -->
+    <div class="card">
+      <label>Modelos (templates) (você pode editar aqui se quiser)</label>
+      <textarea id="templates" rows="8">
+ADD CELLEMERGENCYAREA:LOCALCELLID=11,EMERGENCYAREAID=0;
+ADD CELLEMERGENCYAREA:LOCALCELLID=11,EMERGENCYAREAID=1;
+ADD CELLPREALLOCGROUP:LOCALCELLID=11,PREALLOCATIONPARAGROUPID=0,PREALLOCATIONSWITCH=ON,SMARTPREALLOCATIONSWITCH=ON,PREALLOCATIONMINPERIOD=5,PREALLOCATIONSIZE=80,SMARTPREALLOCATIONDURATION=50;
+ADD INTERFREQHOGROUP:LOCALCELLID=11,INTERFREQHOGROUPID=2,INTERFREQHOA1A2HYST=4,INTERFREQHOA1THDRSRP=-114,INTERFREQHOA1THDRSRQ=-36,INTERFREQHOA2THDRSRP=-114,INTERFREQHOA2THDRSRQ=-36,INTERFREQHOA4HYST=4,INTERFREQHOA4THDRSRP=-116,INTERFREQHOA4THDRSRQ=-32,INTERFREQLOADBASEDHOA4THDRSRP=-110,MLBINTERFREQHOA5THD1RSRP=-90,MLBINTERFREQHOA5THD1RSRQ=-10;
+ADD INTERRATHOCOMMGROUP:LOCALCELLID=11,INTERRATHOCOMMGROUPID=1,INTERRATHOA1A2HYST=4,INTERRATHOA1A2TIMETOTRIG=2560ms,INTERRATHOA1THDRSRP=-113,INTERRATHOA1THDRSRQ=-24,INTERRATHOA2THDRSRP=-113,GERANB2THD1RSRP=-113,UTRANB2THD1RSRP=-113;
+ADD NRNFREQ:LOCALCELLID=11,DLARFCN=634080,ULARFCNCONFIGIND=NOT_CFG,CONNFREQPRIORITY=7,NRFREQRESELSUBPRIORITY=0DOT_4;
+
+MOD CaMgtCfg:LocalCELLiD=11,ActiveBufferDelayThd=3;
+MOD CaMgtCfg:LocalCELLiD=11,ActiveBufferLenThd=1;
+MOD CaMgtCfg:LocalCELLiD=11,CaA4TimeToTrigger=40ms;
+MOD CaMgtCfg:LocalCELLiD=11,CaA6TimeToTrigger=160ms;
+MOD CaMgtCfg:LocalCELLiD=11,CarrAggrA2ThdRsrp=-116;
+MOD CaMgtCfg:LocalCELLiD=11,CarrAggrA4ThdRsrp=-114;
+MOD CaMgtCfg:LocalCELLiD=11,CellCaAlgoSwitch=CaDl2CCExtSwitch-1;
+MOD CaMgtCfg:LocalCELLiD=11,CellCaAlgoSwitch=CaDl3CCExtSwitch-1;
+MOD CaMgtCfg:LocalCELLiD=11,CellCaAlgoSwitch=CaDl3CCSwitch-1;
+MOD CaMgtCfg:LocalCELLiD=11,CellCaAlgoSwitch=CaDl4CCSwitch-1;
+MOD CaMgtCfg:LocalCELLiD=11,CellCaAlgoSwitch=CaInstantlyJudgeSwitch-1;
+MOD CaMgtCfg:LocalCELLiD=11,CellCaAlgoSwitch=CaUl2CCSwitch-1;
+MOD CaMgtCfg:LocalCELLiD=11,SccCfgInterval=30;
+MOD CaMgtCfg:LocalCELLiD=11,SccDeactCqiThd=5;
+MOD CaMgtCfg:LocalCELLiD=11,SleepPeriod=65535;
+MOD CaMgtCfg:LocalCELLiD=11,UlCaLargePacketDataVoThld=0;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,DlSchEnhSwitch=2D_FSS_SWITCH-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,DlSchEnhSwitch=APERIODIC_CQI_RPT_OPT_SW-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,DlSchEnhSwitch=DL_EPF_SCH_OPT_SW-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,DlSchEnhSwitch=RETRANS_OPT_ENH_SW-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,HoAllowedSwitch=COV_NR_HO_OPT_SW-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,HoAllowedSwitch=FAST_RETURN_TO_NR_SW-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,HoAllowedSwitch=INTER_RAT_MOBILITY_TO_NR_SW-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,HoAllowedSwitch=LAI_BASED_CSFB_TO_GERAN_SW-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,HoAllowedSwitch=LAI_BASED_CSFB_TO_UTRAN_SW-1;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,NbCellAlgoExtSwitch=RELEASE_PERFM_IMPROVE_SWITCH-0;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,UlCoverageEnhancementSw=ON;
+MOD CellAlgoExtSwitch:LocalCELLiD=11,UlSchEnhSwitch=UL_SCH_DURATION_OPT_SW-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,AnrAlgoSwitch=INTRA_RAT_OVERDISTANCE_SW-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,AnrFunctionSwitch=INTER_RAT_ANR_SW-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,AnrFunctionSwitch=INTRA_RAT_ANR_SW-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,AnrFunctionSwitch=NR_EVENT_ANR_SW-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,AqmAlgoSwitch=AqmAlgoSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,AsAlgoSwitch=ON;
+MOD CellAlgoSwitch:LocalCELLiD=11,CellSchStrategySwitch=AbnUeSchSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,CmasSwitch=ON;
+MOD CellAlgoSwitch:LocalCELLiD=11,CqiAdjAlgoSwitch=AdaptiveStepVarySwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,CqiAdjAlgoSwitch=DlCqiAdjDeltaOptSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,CqiAdjAlgoSwitch=DlEnVarIblerTargetSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,CqiAdjAlgoSwitch=DlVarIBLERtargetSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,CqiAdjAlgoSwitch=PreciseMcsAdaptSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DetectionAlgoSwitch=CqiReliableSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DetectionAlgoSwitch=DrxCqiFalseOptSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,Dl256QamAlgoSwitch=Dl256QamSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DlSchExtSwitch=SMART_FSS_SWITCH-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DlSchSwitch=DlMbrCtrlSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DlSchSwitch=DlPacketLenAwareSchSw-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DlSchSwitch=FreqSelJudgeIgnorDopplerSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DlSchSwitch=FreqSelSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DlSchSwitch=RankRapidRptSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,DlSchSwitch=SmallPktMcsSelectAlgoSw-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,HoAllowedSwitch=GeranCsfbSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,HoAllowedSwitch=IdleCsfbRedirectOptSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,HoAllowedSwitch=ServBasedNrHoSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,HoAllowedSwitch=UtranCsfbSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,HoAllowedSwitch=UtranFlashCsfbSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,InterfRandSwitch=ENB_BASED;
+MOD CellAlgoSwitch:LocalCELLiD=11,IrcSwitch=PucchIrcSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,MlbAlgoSwitch=InterFreqMlbSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,MlbAlgoSwitch=MbfcsSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,MroSwitch=IntraFreqMroSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,MroSwitch=UEMroSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,NbCellAlgoSwitch=ADAPTIVE_PREAMBLE_TRANS_MAX_SW-0;
+MOD CellAlgoSwitch:LocalCELLiD=11,NbCellAlgoSwitch=DL_SCHEDULING_OPT_SWITCH-0;
+MOD CellAlgoSwitch:LocalCELLiD=11,NbCellAlgoSwitch=UCI_REP_NUM_ADAPTIVE_SWITCH-0;
+MOD CellAlgoSwitch:LocalCELLiD=11,NCellClassMgtSw=INTRA_RAT_NCELL_CLASS_SW-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,NCellClassMgtSw=NCELL_CLASS_PCI_CONFLICT_SW-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,PsicSwitch=MumimoPuschPsicSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,RachAlgoSwitch=PrachFreqAdjSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,RachAlgoSwitch=RachAdjSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,RachAlgoSwitch=UeRaInforInqSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,RohcSwitch=ON;
+MOD CellAlgoSwitch:LocalCELLiD=11,RrcReestDataFwdSwitch=ON;
+MOD CellAlgoSwitch:LocalCELLiD=11,ServiceDiffSwitch=LowDelayServiceOptSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UEInactiveTimerQCI1Switch=ON;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlPcAlgoSwitch=NearPointUeOptPUSCHSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlPcAlgoSwitch=UlCaPuschPcOptSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchExtSwitch=SrPairingSwitch-0;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchExtSwitch=UlFssWindSearchDirRandSw-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchExtSwitch=UlPacketLenAwareSchSw-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchExtSwitch=UlPAMCSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchSwitch=SchedulerCtrlPowerSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchSwitch=TtiBundlingSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchSwitch=UlInterfFssSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchSwitch=UlMbrCtrlSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UlSchSwitch=UlVmimoSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UplinkCompSwitch=UlJointReception3CellSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UplinkCompSwitch=UlJointReceptionPhaseIISwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,UplinkCompSwitch=UlJointReceptionSwitch-1;
+MOD CellAlgoSwitch:LocalCELLiD=11,VoLTESwitch=VoLTEMoPrefSwitch-1;
+MOD CellBfMimoParaCfg:LocalCELLiD=11,Tm3ToTm9SwtgSEffOfs256qam=0;
+MOD CellBfMimoParaCfg:LocalCELLiD=11,Tm9ToTm3SwtgSEffOfs256qam=0;
+MOD CellBtruncAlgoPara:LocalCELLiD=11,PsGroupMcs=20;
+MOD CellCeSchCfg:LocalCELLiD=11,CoverageLevel=COVERAGE_LEVEL_2,PdschMaxNumRepModeB=PDSCH_MAX_NUM_R256;
+MOD CellCeSchCfg:LocalCELLiD=11,CoverageLevel=COVERAGE_LEVEL_3,PdschMaxNumRepModeB=PDSCH_MAX_NUM_R512;
+MOD CellChPwrCfg:LocalCELLiD=11,DbchPwr=0;
+MOD CellChPwrCfg:LocalCELLiD=11,OutputPowerRate=0;
+MOD CellChPwrCfg:LocalCELLiD=11,PbchPwr=0;
+MOD CellChPwrCfg:LocalCELLiD=11,PcfichPwr=600;
+MOD CellChPwrCfg:LocalCELLiD=11,RaRspPwr=600;
+MOD CellCounterParaGroup:LocalCELLiD=11,CellCounterAlgoSwitch=BasedA3EdgeUserSwitch-1;
+MOD CellCounterParaGroup:LocalCELLiD=11,CellCounterAlgoSwitch=SimuLoadPrbCountForbidSw-1;
+MOD CellCounterParaGroup:LocalCELLiD=11,EdgeUserA3Offset=-20;
+MOD CellCqiAdjAlgo:LocalCELLiD=11,CqiOptSwitch=PUCCH_CQI_FALSE_DETECTION_SW-1;
+MOD CellCqiAdjAlgo:LocalCELLiD=11,CqiOptSwitch=PUSCH_CQI_FALSE_DETECTION_SW-1;
+MOD CellCqiAdjAlgo:LocalCELLiD=11,IblerTargetOffset=5;
+MOD CellCspcPara:LocalCELLiD=11,CspcUeSrsCfgRptPeriod=30;
+MOD CellCspcPara:LocalCELLiD=11,IntraEnbCspcSw=ON;
+MOD CELLDACQPARACFG:LocalCELLiD=11,AmbrLimitSchUserNum=100;
+MOD CELLDACQPARACFG:LocalCELLiD=11,AmbrProtectSchUserNum=400;
+MOD CellDlpcPdcch:LocalCELLiD=11,DediDciPwrOffset=0;
+MOD CellDlpcPdschPa:LocalCELLiD=11,CellNpreoAdjThreshold=5;
+MOD CellDlpcPdschPa:LocalCELLiD=11,NomPdschRsEpreOffset=2;
+MOD CellDlpcPdschPa:LocalCELLiD=11,PaPcOff=DB0_P_A;
+MOD CellDlpcPdschPa:LocalCELLiD=11,UeNpreoAdjThreshold=1;
+MOD CellDlpcPhich:LocalCELLiD=11,PwrOffset=30;
+MOD CellDlschAlgo:LocalCELLiD=11,CqiAdjInitialStep=100;
+MOD CellDlschAlgo:LocalCELLiD=11,DlCaUeCapAllocStrategy=ADAPTIVELY_DIVIDED;
+MOD CellDlschAlgo:LocalCELLiD=11,DlEnhancedVoipSchSw=DlSchVoipDuringHoSwitch-0;
+MOD CellDlschAlgo:LocalCELLiD=11,DlFirstHarqTxTbsIncNum=4;
+MOD CellDlschAlgo:LocalCELLiD=11,EnbInterfRandMod=MOD3;
+MOD CellDlschAlgo:LocalCELLiD=11,FreqSelJudgePeriod=1;
+MOD CellDlschAlgo:LocalCELLiD=11,HighIblerTargetTbsIdxThld=5;
+MOD CellDlschAlgo:LocalCELLiD=11,LowIblerTargetTbsIdxThld=21;
+MOD CellDlschAlgo:LocalCELLiD=11,PdschMaxCodeRate=R12_0DOT930;
+MOD CellDlschAlgo:LocalCELLiD=11,RankReverseDetectCntThd=0;
+MOD CellDlschAlgo:LocalCELLiD=11,RbgAllocStrategy=ROUND_UP;
+MOD CellDlschAlgo:LocalCELLiD=11,RBPriMcsSelectRatioThd=50;
+MOD CellDlschAlgo:LocalCELLiD=11,RBPriMcsSelectStrategy=MULTIUSR_LOWMCSLIMIT_STRATEGY;
+MOD CellDlschAlgo:LocalCELLiD=11,SfnDlLowLoadThd=10;
+MOD CellDlschAlgo:LocalCELLiD=11,StartRankDetectCntThd=0;
+MOD CellDlschAlgo:LocalCELLiD=11,StartRankDetectEffThd=0;
+MOD CellDrxPara:LocalCELLiD=11,DrxAlgSwitch=ON;
+MOD CellDrxPara:LocalCELLiD=11,DrxInactivityTimerUnsync=PSF1280;
+MOD CellDrxPara:LocalCELLiD=11,DrxPolicyMode=DEFAULT;
+MOD CellDrxPara:LocalCELLiD=11,DrxStopSrPendingSw=ON;
+MOD CellDrxPara:LocalCELLiD=11,FddEnterDrxThd=300;
+MOD CellDrxPara:LocalCELLiD=11,FddExitDrxThd=800;
+MOD CellDrxPara:LocalCELLiD=11,VolteGapDrxExclusiveSwitch=ON;
+MOD CellDrxSpecialPara:LocalCELLiD=11,DrxInactivityTimerSpecial=PSF5;
+MOD CellDrxSpecialPara:LocalCELLiD=11,OnDurationTimerSpecial=PSF4;
+MOD CellEicic:LocalCELLiD=11,A3Offset=0;
+MOD CellEicic:LocalCELLiD=11,AbsPattern=SUBFRAME_INVALID;
+MOD CellEmtcAlgo:LocalCELLiD=11,MpdcchPdschFreqHoppingOfs=3;
+MOD CellEmtcAlgo:LocalCELLiD=11,PrachFreqHoppingOffset=26;
+MOD CellEnhCoverage:LocalCELLiD=11,EnhChCoverageSw=PRACH_PUCCH_COVERAGE_ENH_SW-1;
+MOD CellEnhCoverage:LocalCELLiD=11,EnhChCoverageSw=TTIB_SMART_RETRANS_SW-1;
+MOD CellHoParaCfg:LocalCELLiD=11,BlindHoA1A2ThdRsrq=-30;
+MOD CellHoParaCfg:LocalCELLiD=11,CellHoAlgoSwitch=InterFreqUlQualEnhHoSw-1;
+MOD CellHoParaCfg:LocalCELLiD=11,GapPatternType=GAP_PATTERN_TYPE_1;
+MOD CellHoParaCfg:LocalCELLiD=11,HoModeSwitch=BlindHoSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,HoModeSwitch=NrHoSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,HoModeSwitch=NrRedirectEnhSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,HoModeSwitch=NrRedirectSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,HoModeSwitch=UtranPsHoSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,HoModeSwitch=UtranRedirectSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,HoModeSwitch=UtranSrvccSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,Qci1PlrThldForVolteQualHo=20;
+MOD CellHoParaCfg:LocalCELLiD=11,ServBasedNrMeasTimer=10;
+MOD CellHoParaCfg:LocalCELLiD=11,SrvccMrDelayTimer=10;
+MOD CellHoParaCfg:LocalCELLiD=11,VolteHoNrDelayTimer=20;
+MOD CellHoParaCfg:LocalCELLiD=11,VolteQualIfHoQci1PlrThld=10;
+MOD CellHoParaCfg:LocalCELLiD=11,VoLTEQualityHoAlgoSwitch=InterFreqVolteQualityHoSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,VoLTEQualityHoAlgoSwitch=UtranVolteQualityHoSwitch-1;
+MOD CellHoParaCfg:LocalCELLiD=11,VolteQualRecoveryQci1PlrThld=2;
+MOD CellIntelAmcConfig:LocalCELLiD=11,IntelligentAmcSwitch=UL_INTEL_AMC_SELECTION_SW-1;
+MOD CellMbfcs:LocalCELLiD=11,InterFreqMeasMcsThd=28;
+MOD CellMcPara:LocalCELLiD=11,EcidReportAmount=r4;
+MOD CellMcPara:LocalCELLiD=11,ReportQuantity=SAME_AS_TRIG_QUAN;
+MOD CellMimoParaCfg:LocalCELLiD=11,FixedMimoMode=TM4;
+MOD CellMimoParaCfg:LocalCELLiD=11,MimoSwitch=4T_TM9_ADAPTATION_SW-0;
+MOD CellMLB:LocalCELLiD=11,InterFreqLoadEvalPrd=15;
+MOD CellMLB:LocalCELLiD=11,InterFreqMlbThd=60;
+MOD CellMLB:LocalCELLiD=11,InterFreqMlbUlThd=60;
+MOD CellMLB:LocalCELLiD=11,InterFreqUeTrsfType=IdleUE-0;
+MOD CellMLB:LocalCELLiD=11,LoadBalanceNCellScope=ALL;
+MOD CellMLB:LocalCELLiD=11,MlbHoCellSelectStrategy=ONLY_STRONGEST_CELL;
+MOD CellMLB:LocalCELLiD=11,MlbMinUeNumOffset=10;
+MOD CellMLB:LocalCELLiD=11,MlbMinUeNumThd=10;
+MOD CellMLB:LocalCELLiD=11,MlbTriggerMode=PRB_ONLY;
+MOD CellMLB:LocalCELLiD=11,MlbUeNumOffset=20;
+MOD CellMLB:LocalCELLiD=11,MlbUeSelectPrbThd=2;
+MOD CellMLB:LocalCELLiD=11,UeDlPrbLowThdOffset=0;
+MOD CellMLB:LocalCELLiD=11,UeUlPrbLowThdOffset=0;
+MOD CellMlbHo:LocalCELLiD=11,MlbHoInProtectMode=PROTECTTIMERMODE-1;
+MOD CellMlbHo:LocalCELLiD=11,MlbHoInProtectTimer=5;
+MOD CellMlbUeSel:LocalCELLiD=11,UeSelectQciPrio=255;
+MOD CellMMAlgo:LocalCELLiD=11,BfWeightType=PEBF;
+MOD CellMro:LocalCELLiD=11,CIOADJLIMITCFGIND=CFG,CIOADJUPPERLIMIT=dB1,CIOADJLOWERLIMIT=dB-3;
+MOD CellPcAlgo:LocalCELLiD=11,NearPointUePuschType=UlBigPktUser;
+MOD CellPdcchAlgo:LocalCELLiD=11,HysForCfiBasedPreSch=1;
+MOD CellPdcchAlgo:LocalCELLiD=11,PDCCHAggLvlAdaptStrage=STRATEGYBASEDONCAPACITY;
+MOD CellPdcchAlgo:LocalCELLiD=11,PdcchMaxCodeRate=95;
+MOD CellPdcchAlgo:LocalCELLiD=11,PdcchPowerEnhancedSwitch=ON_ALL;
+MOD CellPdcchAlgo:LocalCELLiD=11,PdcchSdmaWeightType=PREFERENTIAL_COV_GUARANTEE;
+MOD CellPdcchAlgo:LocalCELLiD=11,PdcchSparePowerAllocStrage=WEAKCOVERAGEUSER;
+MOD CellPdcchAlgo:LocalCELLiD=11,ULDLPdcchSymNum=1;
+MOD CellPdcchAlgo:LocalCELLiD=11,VoicePdcchOtLpAdjLowerLmt=-20;
+MOD CellPucchAlgo:LocalCELLiD=11,SriAlgoSwitch=SriAdaptiveHoldForVoIPSW-1;
+MOD CellPucchAlgo:LocalCELLiD=11,SriAlgoSwitch=SriDetectEnhanceSW-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,DrxParaGroupId=0;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,InterFreqHoGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,InterRatHoCommGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,InterRatHoUtranGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,NsaDcInterFreqHoGroupId=255;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,NsaDcInterRatHoCommGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,NsaDcUtranHoGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,QciAlgoSwitch=INTER_FREQ_MLB_ALLOWED-0;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,QciAlgoSwitch=INTER_FREQ_MLB_LOW_PRIO_IND-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,QciPriorityForDrx=2;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,SinrAdjustTargetIbler=10;
+MOD CellQciPara:LocalCELLiD=11,Qci=1,TrafficRelDelay=31000;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,DrxParaGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,InterFreqHoGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,InterRatHoCommGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,InterRatHoUtranGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,NsaDcInterFreqHoGroupId=255;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,NsaDcInterRatHoCommGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,NsaDcUtranHoGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,QciAlgoSwitch=INTER_FREQ_MLB_ALLOWED-0;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,QciAlgoSwitch=INTER_FREQ_MLB_LOW_PRIO_IND-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,QciPriorityForDrx=4;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,QciPriorityForHo=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=2,TrafficRelDelay=31000;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,DecreaseInNackCqiAdj=10;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,DrxParaGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,InitDlTargetIbler=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,LowDelayCeuPreallocOptThld=30;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,LowDelayUeSrSchMinDataVol=1500;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,LowLatencyFlag=TRUE;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,NsaDcInterFreqHoGroupId=2;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,PreallocationParaGroupId=0;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,QciAlgoSwitch=DL_SCH_PRIORITY_OPT_SW-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,QciAlgoSwitch=LOW_DELAY_UE_UL_MCS_IDX_RDC_SW-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,QciAlgoSwitch=LOW_DELAY_UE_UL_SCH_OPT_SW-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,QciAlgoSwitch=PDCCH_BOUNDARY_PWR_CTRL_OPT_SW-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,QciAlgoSwitch=SR_PRIORITY_DATA_OPT_SW-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,QciAlgoSwitch=SRI_PERIOD_OPT_SW-1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,QciPdcchSinrOffset=30;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,QciPriorityForDrx=3;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,SinrAdjustTargetIbler=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=3,TrafficRelDelay=31000;
+MOD CellQciPara:LocalCELLiD=11,Qci=4,NsaDcInterFreqHoGroupId=2;
+MOD CellQciPara:LocalCELLiD=11,Qci=4,QciPriorityForDrx=5;
+MOD CellQciPara:LocalCELLiD=11,Qci=4,QciPriorityForHo=4;
+MOD CellQciPara:LocalCELLiD=11,Qci=4,TrafficRelDelay=31000;
+MOD CellQciPara:LocalCELLiD=11,Qci=5,NsaDcInterFreqHoGroupId=2;
+MOD CellQciPara:LocalCELLiD=11,Qci=5,QciPriorityForDrx=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=5,QciPriorityForHo=9;
+MOD CellQciPara:LocalCELLiD=11,Qci=5,TrafficRelDelay=31000;
+MOD CellQciPara:LocalCELLiD=11,Qci=6,NsaDcInterFreqHoGroupId=2;
+MOD CellQciPara:LocalCELLiD=11,Qci=6,QciPriorityForDrx=6;
+MOD CellQciPara:LocalCELLiD=11,Qci=6,QciPriorityForHo=5;
+MOD CellQciPara:LocalCELLiD=11,Qci=6,TrafficRelDelay=31000;
+MOD CellQciPara:LocalCELLiD=11,Qci=65,DrxParaGroupId=0;
+MOD CellQciPara:LocalCELLiD=11,Qci=65,InterFreqHoGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=65,InterRatHoCommGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=65,InterRatHoUtranGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=65,SinrAdjustTargetIbler=10;
+MOD CellQciPara:LocalCELLiD=11,Qci=66,DrxParaGroupId=0;
+MOD CellQciPara:LocalCELLiD=11,Qci=66,InterFreqHoGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=66,InterRatHoCommGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=66,InterRatHoUtranGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=66,SinrAdjustTargetIbler=10;
+MOD CellQciPara:LocalCELLiD=11,Qci=69,DrxParaGroupId=3;
+MOD CellQciPara:LocalCELLiD=11,Qci=7,NsaDcInterFreqHoGroupId=2;
+MOD CellQciPara:LocalCELLiD=11,Qci=7,QciPriorityForDrx=7;
+MOD CellQciPara:LocalCELLiD=11,Qci=7,QciPriorityForHo=6;
+MOD CellQciPara:LocalCELLiD=11,Qci=7,TrafficRelDelay=31000;
+MOD CellQciPara:LocalCELLiD=11,Qci=75,DrxParaGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=75,NsaDcOptSwitch=SERV_BASED_INTER_FREQ_HO_SW-0;
+MOD CellQciPara:LocalCELLiD=11,Qci=79,DrxParaGroupId=1;
+MOD CellQciPara:LocalCELLiD=11,Qci=79,NsaDcOptSwitch=SERV_BASED_INTER_FREQ_HO_SW-0;
+MOD CellQciPara:LocalCELLiD=11,Qci=8,NsaDcInterFreqHoGroupId=2;
+MOD CellQciPara:LocalCELLiD=11,Qci=8,QciPriorityForDrx=8;
+MOD CellQciPara:LocalCELLiD=11,Qci=8,QciPriorityForHo=7;
+MOD CellQciPara:LocalCELLiD=11,Qci=8,TrafficRelDelay=31000;
+MOD CellQciPara:LocalCELLiD=11,Qci=9,NsaDcInterFreqHoGroupId=2;
+MOD CellQciPara:LocalCELLiD=11,Qci=9,QciPriorityForDrx=9;
+MOD CellQciPara:LocalCELLiD=11,Qci=9,QciPriorityForHo=8;
+MOD CellQciPara:LocalCELLiD=11,Qci=9,TrafficRelDelay=31000;
+MOD CellQciParaExtension:LocalCELLiD=11,Qci=6,DlSchPriorityWeightFactor=1000;
+MOD CellQciParaExtension:LocalCELLiD=11,Qci=6,UlSchPriorityWeightFactor=1000;
+MOD CellRachCECfg:LocalCELLiD=11,CoverageLevel=COVERAGE_LEVEL_0,ContentionResolutionTimer=PP_8;
+MOD CellRachCECfg:LocalCELLiD=11,CoverageLevel=COVERAGE_LEVEL_1,ContentionResolutionTimer=PP_8;
+MOD CellRachCECfg:LocalCELLiD=11,CoverageLevel=COVERAGE_LEVEL_1,RaResponseWindowSize=PP5;
+MOD CellRachCECfg:LocalCELLiD=11,CoverageLevel=COVERAGE_LEVEL_2,ContentionResolutionTimer=PP_8;
+MOD CellRachCECfg:LocalCELLiD=11,CoverageLevel=COVERAGE_LEVEL_2,RaResponseWindowSize=PP5;
+MOD CellRacThd:LocalCELLiD=11,CellCapacityMode=LARGECAPACITY;
+MOD CellRacThd:LocalCELLiD=11,EmtcAdmissionControlUeCnt=65535;
+MOD CellResel:LocalCELLiD=11,NCellChangeHigh=8;
+MOD CellResel:LocalCELLiD=11,NCellChangeMedium=4;
+MOD CellResel:LocalCELLiD=11,Qhyst=DB2_Q_HYST;
+MOD CellResel:LocalCELLiD=11,QHystSfHigh=DB0_Q_HYST_SF_HIGH;
+MOD CellResel:LocalCELLiD=11,QHystSfMedium=DB0_Q_HYST_SF_MEDIUM;
+MOD CellResel:LocalCELLiD=11,QRxLevMin=-60;
+MOD CellResel:LocalCELLiD=11,QRxLevMinForCeModeA=-70;
+MOD CellResel:LocalCELLiD=11,SIntraSearch=25;
+MOD CellResel:LocalCELLiD=11,SNonIntraSearch=15;
+MOD CellResel:LocalCELLiD=11,SpeedDepReselCfgInd=CFG;
+MOD CellResel:LocalCELLiD=11,TEvaluation=S60_T_EVALULATION;
+MOD CellResel:LocalCELLiD=11,ThrshServLow=1;
+MOD CellResel:LocalCELLiD=11,THystNormal=S30_T_HYST_NORMAL;
+MOD CellResel:LocalCELLiD=11,TReselForNb=6_SECOND;
+MOD CellResel:LocalCELLiD=11,TReselInterFreqForNb=6_SECOND;
+MOD CellRfShutdown:LocalCELLiD=11,DlPrbOffset=12;
+MOD CellRfShutdown:LocalCELLiD=11,DlPrbThd=8;
+MOD CellRfShutdown:LocalCELLiD=11,PenaltyDuration=1;
+MOD CellRfShutdown:LocalCELLiD=11,RfShutdownJudgingPolicy=PRB_AND_UE_NUMBER;
+MOD CellRfShutdown:LocalCELLiD=11,RfShutdownSwitch=ON;
+MOD CellRfShutdown:LocalCELLiD=11,UENumThd=10;
+MOD CellRfShutdown:LocalCELLiD=11,UlPrbOffset=12;
+MOD CellRfShutdown:LocalCELLiD=11,UlPrbThd=8;
+MOD CellSel:LocalCELLiD=11,QRxLevMin=-60;
+MOD CellSel:LocalCELLiD=11,QRxLevMinCE=-70;
+MOD CellSiMap:LocalCELLiD=11,EtwsPnDuration=7;
+MOD CellSiMap:LocalCELLiD=11,EtwsPnOverlapPolicy=MERGE;
+MOD CellSiMap:LocalCELLiD=11,NbSib3Period=RF2048;
+MOD CellSiMap:LocalCELLiD=11,NbSib5Period=RF2048;
+MOD CellSiMap:LocalCELLiD=11,SibUpdOptSwitch=Sib12BroadcastOptSwitch-1;
+MOD CellSiMap:LocalCELLiD=11,SibUpdOptSwitch=Sib19AndOnwardsSchOptSw-1;
+MOD CellUciOnPuschPara:LocalCELLiD=11,DeltaOffsetAckIndexForTtiB=13;
+MOD CellUciOnPuschPara:LocalCELLiD=11,DeltaOffsetCqiIndex=8;
+MOD CellUeMeasControlCfg:LocalCELLiD=11,MeasOptAlgoSwitch=NSA_SA_MEAS_OBJ_PREEMPTION_SW-1;
+MOD CellUlCompAlgo:LocalCELLiD=11,UlCompA3OffsetForRelaxedBH=-6;
+MOD CellUlpcDedic:LocalCELLiD=11,PathlossReferenceLink=PCELL;
+MOD CellUlschAlgo:LocalCELLiD=11,DopAlgoSwitch=FastReportDopSwitch-1;
+MOD CellUlschAlgo:LocalCELLiD=11,DopMeasLevel=CLASS_1;
+MOD CellUlschAlgo:LocalCELLiD=11,HystToExitTtiBundling=6;
+MOD CellUlschAlgo:LocalCELLiD=11,PreallocationUserCntThld=200;
+MOD CellUlschAlgo:LocalCELLiD=11,PreAllocMinPeriodForSparse=1ms;
+MOD CellUlschAlgo:LocalCELLiD=11,PuschDtxSchStrategy=EN_ADAPTIVE_RETX;
+MOD CellUlschAlgo:LocalCELLiD=11,StatisticNumThdForTtibExit=N80_TTIB_EXIT;
+MOD CellUlschAlgo:LocalCELLiD=11,TtiBundlingRlcMaxSegNum=5;
+MOD CellUlschAlgo:LocalCELLiD=11,UlCompenSchPeriodinSpurt=INTERVAL_ADAPTIVE;
+MOD CellUlschAlgo:LocalCELLiD=11,UlDelaySchStrategy=VOIP_DELAYSCH;
+MOD CellUlschAlgo:LocalCELLiD=11,UlEnhencedVoipSchSw=SpsAndDrxOptSwitch-0;
+MOD CellUlschAlgo:LocalCELLiD=11,UlEnhencedVoipSchSw=UlVoipCrosslayerOptSwitch-1;
+MOD CellUlschAlgo:LocalCELLiD=11,UlEnhencedVoipSchSw=UlVoipServStateEnhancedSw-0;
+MOD CellUlschAlgo:LocalCELLiD=11,UlEnhencedVoipSchSw=UlVoLTEDataSizeEstSwitch-1;
+MOD CellUlschAlgo:LocalCELLiD=11,UlInterfRandomMode=THREE_MODE_BASED_ON_PCI;
+MOD CellUlschAlgo:LocalCELLiD=11,UlTargetIBlerAdaptType=SinrFlunIBlerAdaptSwitch-0;
+MOD CellUlschAlgo:LocalCELLiD=11,UlTargetIBlerAdaptType=SinrJumpIBlerAdaptSwitch-0;
+MOD CellUlschAlgo:LocalCELLiD=11,UlVoipRlcMaxSegNum=23;
+MOD CellUSParaCfg:LocalCELLiD=11,UsAlgoExSwitch=UsFreqPriStrategySw-0;
+MOD CellUSParaCfg:LocalCELLiD=11,UsAlgoSwitch=UsNbInterfHoSwitch-1;
+MOD CSFallBackHo:LocalCELLiD=11,CsfbHoUtranB1ThdEcn0=-13;
+MOD CSFallBackHo:LocalCELLiD=11,CsfbHoUtranB1ThdRscp=-103;
+MOD CSFallBackHo:LocalCELLiD=11,CsfbHoUtranTimeToTrig=80ms;
+MOD CSFallBackHo:LocalCELLiD=11,CsfbProtectTimer=40;
+MOD DistBasedHO:LocalCELLiD=11,DistBasedMeasObjType=EUTRAN-1;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=0,CATTYPE=LTE,DrxInactivityTimer=PSF4;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=0,CATTYPE=LTE,EnterDrxSwitch=ON;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=0,CATTYPE=LTE,OnDurationTimer=PSF4;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=0,EnterDrxSwitch=ON;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=1,CATTYPE=LTE,DrxInactivityTimer=PSF80;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=1,CATTYPE=LTE,EnterDrxSwitch=OFF;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=1,CATTYPE=LTE,LongDrxCycle=SF40;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=1,EnterDrxSwitch=OFF;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=10,CATTYPE=EMTC_MODE_A,DrxInactivityTimer=PSF5;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=2,CATTYPE=LTE,DrxInactivityTimer=PSF20;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=2,CATTYPE=LTE,LongDrxCycle=SF80;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=2,CATTYPE=LTE,OnDurationTimer=PSF5;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=20,CATTYPE=EMTC_MODE_B,DrxInactivityTimer=PSF5;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=3,CATTYPE=LTE,DrxInactivityTimer=PSF100;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=3,CATTYPE=LTE,LongDrxCycle=SF320;
+MOD DrxParaGroup:LocalCELLiD=11,DrxParaGroupId=3,CATTYPE=LTE,OnDurationTimer=PSF10;
+MOD eNBCellOpRsvdPara:LocalCELLiD=11,TrackingAreaId=0,RsvdSwPara1=BIT7-1;
+MOD eNBCellRsvdPara:LocalCELLiD=11,RsvdSwPara10=BIT1-1;
+MOD HighSpdAdaptionPara:LocalCELLiD=11,UserLowSpeedJudgeNum=1;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,A4A5IfHoA1A2TrigQuan=BOTH;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqHoA1A2Hyst=4;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqHoA1ThdRsrp=-114;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqHoA1ThdRsrq=-28;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqHoA2ThdRsrp=-114;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqHoA2ThdRsrq=-28;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqHoA4Hyst=4;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqHoA4ThdRsrp=-116;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqHoA4ThdRsrq=-28;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,InterFreqLoadBasedHoA4ThdRsrp=-110;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,MlbInterFreqHoA5Thd1Rsrp=-90;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,MlbInterFreqHoA5Thd1Rsrq=-10;
+MOD InterFreqHoGroup:LocalCELLiD=11,InterFreqHoGroupId=0,UlBadQualHoA4Offset=10;
+MOD InterRatHoCommGroup:LocalCELLiD=11,InterRatHoCommGroupId=0,InterRatHoA1A2Hyst=4;
+MOD InterRatHoCommGroup:LocalCELLiD=11,InterRatHoCommGroupId=0,InterRatHoA1A2TimeToTrig=2560ms;
+MOD InterRatHoCommGroup:LocalCELLiD=11,InterRatHoCommGroupId=0,InterRatHoA1ThdRsrp=-118;
+MOD InterRatHoCommGroup:LocalCELLiD=11,InterRatHoCommGroupId=0,InterRatHoA2ThdRsrp=-118;
+MOD InterRatHoCommGroup:LocalCELLiD=11,InterRatHoCommGroupId=0,InterRatHoNrA1ThldRsrp=-114;
+MOD InterRatHoCommGroup:LocalCELLiD=11,InterRatHoCommGroupId=0,InterRatHoNrA2ThldRsrp=-114;
+MOD InterRatHoCommGroup:LocalCELLiD=11,InterRatHoCommGroupId=0,NrB2Thld1Rsrp=-116;
+MOD InterRatHoNrParamGrp:LocalCELLiD=11,NrHoParamGroupId=0,CovBasedNrB1RsrpThld=-113;
+MOD InterRatHoNrParamGrp:LocalCELLiD=11,NrHoParamGroupId=0,NrB1B2TimeToTrigger=640ms;
+MOD InterRatHoNrParamGrp:LocalCELLiD=11,NrHoParamGroupId=0,ServBasedNrB1RsrpThld=-113;
+MOD InterRatHoUtranGroup:LocalCELLiD=11,InterRatHoUtranGroupId=0,InterRatHoUtranB1Hyst=4;
+MOD InterRatHoUtranGroup:LocalCELLiD=11,InterRatHoUtranGroupId=0,InterRatHoUtranB1ThdEcn0=-32;
+MOD InterRatHoUtranGroup:LocalCELLiD=11,InterRatHoUtranGroupId=0,InterRatHoUtranB1ThdRscp=-105;
+MOD InterRatHoUtranGroup:LocalCELLiD=11,InterRatHoUtranGroupId=0,InterRatHoUtranB1TimeToTrig=1024ms;
+MOD IntraFreqHoGroup:LocalCELLiD=11,IntraFreqHoGroupId=0,EmtcHandoverA3TimeToTrig=640ms;
+MOD IntraFreqHoGroup:LocalCELLiD=11,IntraFreqHoGroupId=0,IntraFreqHoA3Hyst=4;
+MOD IntraFreqHoGroup:LocalCELLiD=11,IntraFreqHoGroupId=0,IntraFreqHoA3Offset=4;
+MOD IntraFreqHoGroup:LocalCELLiD=11,IntraFreqHoGroupId=0,IntraFreqHoA3TimeToTrig=640ms;
+MOD NCellParaCfg:LocalCELLiD=11,RatType=EUTRAN,HoStatThd=20;
+MOD NCellParaCfg:LocalCELLiD=11,RatType=EUTRAN,NCellOdDisThd=20000;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,NrDataVolumeRptCfg=65535;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,NsaDcAlgoExtSwitch=IDLE_NSA_PCC_ANCHORING_OPT_SW-0;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,NsaDcAlgoExtSwitch=INSTANT_JUDGEMENT_SW-1;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,NsaDcAlgoExtSwitch=PERIODIC_SCG_ADD_OPT_SW-0;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,NsaDcAlgoSwitch=NSA_DC_PREALLOCATION_SW-1;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,NsaDcLteScellConfigIntvl=30;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,NsaDcPccAnchorA1RsrpThld=-85;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,NsaDcUeMcgUlAmbrRatio=255;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,ScgAdditionInterval=30;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,ShortPrdNoTfcScgAddIntvl=4;
+MOD NsaDcMgmtConfig:LocalCELLiD=11,UlQualityThldForScgRelease=30;
+MOD PCCHCfg:LocalCELLiD=11,DefaultPagingCycle=rf64;
+MOD PCCHCfg:LocalCELLiD=11,NbForNbIoT=ONE_64TH_T;
+MOD PCCHCfg:LocalCELLiD=11,PagingStrategy=PAGING_STRATEGY_DIFFPRI;
+MOD PDSCHCfg:LocalCELLiD=11,Pb=0;
+MOD PDSCHCfg:LocalCELLiD=11,ReferenceSignalPwr=181;
+MOD PimInterfSmartAvoid:LocalCELLiD=11,PimDlPwrReductionThld=0;
+MOD PUCCHCfg:LocalCELLiD=11,Format2ChAllocMode=RANDOMMODE;
+MOD PUSCHCfg:LocalCELLiD=11,HoppingOffset=10;
+MOD PUSCHCfg:LocalCELLiD=11,R12Qam64Enabled=BOOLEAN_TRUE;
+MOD PUSCHCfg:LocalCELLiD=11,Ul256QamAlgoSwitch=UL_256QAM_SWITCH-1;
+MOD RACHCfg:LocalCELLiD=11,MaxHarqMsg3Tx=8;
+MOD RACHCfg:LocalCELLiD=11,PrachStartTimeCfgInd=NOT_CFG;
+MOD SRSCfg:LocalCELLiD=11,TddSrsCfgMode=ACCESS_FIRST;
+MOD TATIMER:LocalCELLiD=11,TimeAlignmentTimer=SF10240;
+MOD UeTimerConst:LocalCELLiD=11,T300ForNb=MS10000_T300ForNb;
+MOD UeTimerConst:LocalCELLiD=11,T301=MS1000_T301;
+MOD VolteAlgoConfig:LocalCELLiD=11,VolteOptSwitch=MO_VOICE_CALL_IND_SW-1;
+MOD VolteAlgoConfig:LocalCELLiD=11,VolteUlPrecSchCceUsageThld=0;
+MOD WtcpProxyAlgo:LocalCELLiD=11,MaxRttStatisticsThd=3000;
+MOD WtcpProxyAlgo:LocalCELLiD=11,TCPStatisticsSwitch=ON;
+MOD CAMGTCFG:LOCALCELLID=11,VOLTECAA2RSRPTHLD=0;
+MOD CELLALGOSWITCH:LOCALCELLID=11,AMRCALGOSWITCH=ULAMRCHECKSW-0;
+MOD CELLALGOSWITCH:LOCALCELLID=11,AMRCALGOSWITCH=VOICECODINGMODEMEASSW-1;
+MOD CELLALGOSWITCH:LOCALCELLID=11,ANRALGOSWITCH=INTRA_RAT_OVERDISTANCE_SW-1; 
+MOD CELLALGOSWITCH:LOCALCELLID=11,EMIMOSWITCH=DrxSimulAckNackAndCqiSwitch-1; 
+MOD CELLALGOSWITCH:LOCALCELLID=11,EMIMOSWITCH=EMIMOCSIENHANCESWITCH-1;
+MOD CELLALGOSWITCH:LOCALCELLID=11,EMIMOSWITCH=PreciseAmcSwitch-1;
+MOD CELLALGOSWITCH:LOCALCELLID=11,ULSCHEXTSWITCH=ENHANCEDSCHFORSPARSESWITCH-1;
+MOD CELLCHPWRCFG:LOCALCELLID=11,PCHPWR=-600;
+MOD CELLCHPWRCFG:LOCALCELLID=11,SCHPWR=-600;
+MOD CELLCQIADJALGO:LOCALCELLID=11,DLVOLTECQIADJOPTSW=DLDELTACQIOPTSWITCH-1;
+MOD CELLCQIADJALGO:LOCALCELLID=11,VOLTENACKDELTACQI=30;
+MOD CELLCQIADJALGO:LOCALCELLID=11,VOLTERPTCQIDIFFLIMIT=3;
+MOD CELLDLSCHALGO:LOCALCELLID=11,CASCHSTRATEGY=DIFF_SCHEDULE;
+MOD CELLDLSCHALGO:LOCALCELLID=11,CQIONLYOUTERLOOPSWITCH=ON;
+MOD CELLDLSCHALGO:LOCALCELLID=11,DLENHANCEDVOIPSCHSW=DLVOICERETRANSOPTSWITCH-1;
+MOD CELLDLSCHALGO:LOCALCELLID=11,MAXMIMORANKPARA=SW_MAX_SM_RANK_4;
+MOD CELLDRXPARA:LOCALCELLID=11,SINRTHLDFORVOLTEDRXCTRL=6;
+MOD CELLDRXPARA:LOCALCELLID=11,VOLTEPLRTHLDFOREXITINGDRX=1;
+MOD CELLMIMOPARACFG:LOCALCELLID=11,MIMOADAPTIVESWITCH=NO_ADAPTIVE,FIXEDMIMOMODE=TM4;
+MOD CELLMLBUESEL:LOCALCELLID=11,NSADCUESELECTIONSTRATEGY=LTE_UE_PREFERRED;
+MOD CELLPCALGO:LOCALCELLID=11,VOICEPUCCHRSRPHIGHTHLDOFS=10;
+MOD CELLPCALGO:LOCALCELLID=11,VOLTEPUSCHPOWEROFFSET=3;
+MOD CELLPDCCHALGO:LOCALCELLID=11,VOLTEPDCCHOPTSWITCH=VOLTE_PDCCH_CCE_SELECT_SWITCH-1;
+MOD CELLPDCCHALGO:LOCALCELLID=11,VOLTEPDCCHSINROFFSET=30;
+MOD CELLPUCCHALGO:LOCALCELLID=11,SRIALGOSWITCH=SRIPERIODOPTFORVOIPSW-1;
+MOD CELLPUCCHALGO:LOCALCELLID=11,SRILOWLOADTHD=20; 
+MOD CELLQCIPARA:LOCALCELLID=11,QCI=1,NSADCOPTSWITCH=QCI_REL_BASED_PCC_ANCHORING_SW-1;
+MOD CELLQCIPARA:LOCALCELLID=11,QCI=1,ULHARQMAXTXNUM=N8;
+MOD CELLQCIPARA:LOCALCELLID=11,QCI=8,NSADCOPTSWITCH=SERV_BASED_INTER_FREQ_HO_SW-0;
+MOD CELLQCIPARA:LOCALCELLID=11,QCI=9,NSADCOPTSWITCH=SERV_BASED_INTER_FREQ_HO_SW-0;
+MOD CELLRESEL:LOCALCELLID=11,SINTRASEARCHCFGIND=CFG,SINTRASEARCH=25;
+MOD CELLRESEL:LOCALCELLID=11,SPEEDDEPRESELCFGIND=CFG,NCELLCHANGEMEDIUM=4,NCELLCHANGEHIGH=8;
+MOD CELLRFSHUTDOWN:LOCALCELLID=11,RSPWRADJOFFSET=0;
+MOD CELLUCIONPUSCHPARA:LOCALCELLID=11,DELTAOFFSETACKINDEXFORTTIB=11;
+MOD CELLULSCHALGO:LOCALCELLID=11,ULENHENCEDVOIPSCHSW=VOLTEPDCCHDTXOPTSWITCH-1;
+MOD CELLUSPARACFG:LOCALCELLID=11,ULSCHOPTCOUNT=3;
+MOD NCELLDLRSRPMEASPARA:LOCALCELLID=11,NCELLDLRSRPMEASA3OFFSET=-20;
+MOD NSADCMGMTCONFIG:LOCALCELLID=11,NSADCALGOSWITCH=IDLE_MODE_NSA_PCC_ANCHORING_SW-1;
+MOD NSADCMGMTCONFIG:LOCALCELLID=11,NSADCALGOSWITCH=NSA_DC_CAPABILITY_SWITCH-1;
+MOD NSADCMGMTCONFIG:LOCALCELLID=11,NSADCALGOSWITCH=NSA_PCC_ANCHORING_SWITCH-1;
+MOD NSADCMGMTCONFIG:LOCALCELLID=11,NSADCALGOSWITCH=PERIODIC_PCC_ANCHORING_SW-1;
+MOD NSADCMGMTCONFIG:LOCALCELLID=11,NSADCALGOSWITCH=VOLUME_BASED_PERIODIC_TRIG_SW-0;
+MOD NSADCMGMTCONFIG:LOCALCELLID=11,NSADCUELTEFUNACTIVATIONSW=MBOCS_SW-0;
+MOD NSADCMGMTCONFIG:LOCALCELLID=11,SCGADDITIONINTERVAL=10;
+MOD PUSCHCFG:LOCALCELLID=11,HOPPINGOFFSET=11;
+MOD RACHCFG:LOCALCELLID=11,VOLTEHORAMPREAMBLEPWROFS=5;
+MOD VOLTEALGOCONFIG:LOCALCELLID=11,POORVOLTEPDCCHSINROFFSET=5;
+MOD VOLTEALGOCONFIG:LOCALCELLID=11,ULCOMPNSCHBASETIMEUPTTHLD=10;
+MOD VOLTEALGOCONFIG:LOCALCELLID=11,VOLTEOPTEXTSWITCH=POOR_VOLTE_HO_CMD_DUP_SW-1;
+MOD VOLTEALGOCONFIG:LOCALCELLID=11,VOLTEOPTSWITCH=VOLTE_CALL_HOLD_SW-1;
+MOD VOLTEALGOCONFIG:LOCALCELLID=11,VOLTEOPTSWITCH=VOLTE_FORBID_UL_256_QAM_SW-1;
+MOD VOLTEALGOCONFIG:LOCALCELLID=11,VOLTEOPTSWITCH=VOLTE_PUSCH_ACK_OPT_SW-1;
+MOD VOLTEALGOCONFIG:LOCALCELLID=11,VOLTEOPTSWITCH=VOLTE_ROHC_OPT_SW-1;
+ADD EUTRANINTERNFREQ:LOCALCELLID=1,DLEARFCN=200,ULEARFCNCFGIND=NOT_CFG,CELLRESELPRIORITYCFGIND=CFG,CELLRESELPRIORITY=7,SPEEDDEPENDSPCFGIND=NOT_CFG,MEASBANDWIDTH=MBW50,PMAXCFGIND=NOT_CFG,QQUALMINCFGIND=NOT_CFG,INTERFREQCIOADJLIMITCFGIND=NOT_CFG;
+ADD EUTRANINTERNFREQ:LOCALCELLID=1,DLEARFCN=1275,ULEARFCNCFGIND=NOT_CFG,CELLRESELPRIORITYCFGIND=CFG,CELLRESELPRIORITY=7,SPEEDDEPENDSPCFGIND=NOT_CFG,MEASBANDWIDTH=MBW75,PMAXCFGIND=NOT_CFG,QQUALMINCFGIND=NOT_CFG,INTERFREQCIOADJLIMITCFGIND=NOT_CFG;
+ADD EUTRANINTERNFREQ:LOCALCELLID=1,DLEARFCN=2800,ULEARFCNCFGIND=NOT_CFG,CELLRESELPRIORITYCFGIND=CFG,CELLRESELPRIORITY=7,SPEEDDEPENDSPCFGIND=NOT_CFG,MEASBANDWIDTH=MBW50,PMAXCFGIND=NOT_CFG,QQUALMINCFGIND=NOT_CFG,INTERFREQCIOADJLIMITCFGIND=NOT_CFG;
+ADD EUTRANINTERNFREQ:LOCALCELLID=1,DLEARFCN=9410,ULEARFCNCFGIND=NOT_CFG,CELLRESELPRIORITYCFGIND=CFG,CELLRESELPRIORITY=7,SPEEDDEPENDSPCFGIND=NOT_CFG,MEASBANDWIDTH=MBW50,PMAXCFGIND=NOT_CFG,QQUALMINCFGIND=NOT_CFG,INTERFREQCIOADJLIMITCFGIND=NOT_CFG;
+ADD EUTRANINTERNFREQ:LOCALCELLID=1,DLEARFCN=3150,ULEARFCNCFGIND=NOT_CFG,CELLRESELPRIORITYCFGIND=CFG,CELLRESELPRIORITY=7,SPEEDDEPENDSPCFGIND=NOT_CFG,MEASBANDWIDTH=MBW100,PMAXCFGIND=NOT_CFG,QQUALMINCFGIND=NOT_CFG,INTERFREQCIOADJLIMITCFGIND=NOT_CFG;
+MOD EUTRANINTERNFREQ:LOCALCELLID=181,DLEARFCN=1275,cellreselprioritycfgind=CFG,cellreselpriority=7,eutranreseltime=2,qoffsetfreq=dB8,qoffsetfreqconn=dB0,qrxlevmin=-58,threshxhigh=1,threshxlow=0;
+MOD EUTRANINTERNFREQ:LOCALCELLID=181,DLEARFCN=200,cellreselprioritycfgind=CFG,cellreselpriority=7,eutranreseltime=2,qoffsetfreq=dB14,qoffsetfreqconn=dB0,qrxlevmin=-58,threshxhigh=1,threshxlow=0;
+MOD EUTRANINTERNFREQ:LOCALCELLID=181,DLEARFCN=2800,cellreselprioritycfgind=CFG,cellreselpriority=7,eutranreseltime=2,qoffsetfreq=dB8,qoffsetfreqconn=dB0,qrxlevmin=-58,threshxhigh=1,threshxlow=0;
+MOD EUTRANINTERNFREQ:LOCALCELLID=181,DLEARFCN=3150,cellreselprioritycfgind=CFG,cellreselpriority=7,eutranreseltime=2,qoffsetfreq=dB-8,qoffsetfreqconn=dB0,qrxlevmin=-58,threshxhigh=1,threshxlow=0;
+MOD EUTRANINTERNFREQ:LOCALCELLID=181,DLEARFCN=9410,cellreselprioritycfgind=CFG,cellreselpriority=5,eutranreseltime=2,qrxlevmin=-58,threshxhigh=1,threshxlow=0;
+MOD INTERFREQHOGROUP:LOCALCELLID=181,INTERFREQHOGROUPID=0,interfreqhoa1a2hyst=4,interfreqhoa1thdrsrp=-114,interfreqhoa2thdrsrp=-114,interfreqhoa4hyst=4,interfreqhoa4thdrsrp=-116;
+MOD INTERRATHOCOMMGROUP:LOCALCELLID=181,INTERRATHOCOMMGROUPID=0,interrathoa1a2hyst=4,interrathoa1a2timetotrig=2560ms,interrathoa1thdrsrp=-118,interrathoa2thdrsrp=-118;
+MOD INTERRATHOUTRANGROUP:LOCALCELLID=181,INTERRATHOUTRANGROUPID=0,interrathoutranb1hyst=4,interrathoutranb1thdecn0=-32,interrathoutranb1thdrscp=-105,interrathoutranb1timetotrig=1024ms;
+MOD CELLRESEL:LOCALCELLID=181,qhyst=DB2_Q_HYST,qrxlevmin=-60,sintrasearch=25,SINTRASEARCHCFGIND=CFG,SNONINTRASEARCHCFGIND=CFG,snonintrasearch=15,thrshservlow=1;
+ADD UTRANNFREQ:LOCALCELLID=181,UTRANDLARFCN=4360,CELLRESELPRIORITYCFGIND=CFG,UTRANFDDTDDTYPE=UTRAN_FDD,cellreselpriority=4,offsetfreq=0,qqualmin=-14,qrxlevmin=-56,threshxlow=4,AnrInd=ALLOWED;
+MOD NRCELLALGOSWITCH:NRCELLID=11,ANRSWITCH=NR_EUTRAN_ANR_SW-1;
+MOD NRCELLALGOSWITCH:NRCELLID=11,ANRSWITCH=NR_NR_ANR_DEL_SW-1;
+MOD NRCELLALGOSWITCH:NRCELLID=11,ANRSWITCH=NR_NR_ANR_SW-1;
+MOD NRCELLCAMGMTCONFIG:NRCELLID=11,CAA2RSRPTHLD=-110;
+MOD NRCELLCAMGMTCONFIG:NRCELLID=11,CAA5RSRPTHLD2=-106;
+MOD NRCELLCAMGMTCONFIG:NRCELLID=11,CAA6OFFSET=4;
+MOD NRCELLCAMGMTCONFIG:NRCELLID=11,CABANDCOMBSELECTIONSTRAT=BANDWIDTH_FIRST;
+MOD NRCELLRESELCONFIG:NRCELLID=11,CELLRESELSUBPRIORITY=0DOT4;
+MOD NRCELLNSADCCONFIG:NRCELLID=11,DLDATASPLITDELAYTHLD=10;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=1275,EUTRANFREQHIGHPRIRESELTHLD=4;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=1275,EUTRANFREQLOWPRIRESELTHLD=4;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=1275,MINIMUMRXLEVEL=-60;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=200,CONNFREQPRIORITY=9;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=200,EUTRANFREQHIGHPRIRESELTHLD=4;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=200,EUTRANFREQLOWPRIRESELTHLD=4;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=200,EUTRANFREQRESELPRIORITY=5;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=200,MINIMUMRXLEVEL=-60;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=200,VOLTEPRIORITY=9;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=2800,CONNFREQPRIORITY=8;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=2800,EUTRANFREQHIGHPRIRESELTHLD=4;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=2800,EUTRANFREQLOWPRIRESELTHLD=4;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=2800,EUTRANFREQRESELPRIORITY=5;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=2800,MINIMUMRXLEVEL=-60;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=2800,VOLTEPRIORITY=8;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=3150,CONNFREQPRIORITY=7;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=3150,EUTRANFREQHIGHPRIRESELTHLD=4;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=3150,EUTRANFREQLOWPRIRESELTHLD=4;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=3150,EUTRANFREQRESELPRIORITY=5;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=3150,MINIMUMRXLEVEL=-60;
+MOD NRCELLEUTRANNFREQ:NRCELLID=11,DLEARFCN=3150,VOLTEPRIORITY=7;
+MOD NRINTERRATHOPARAM:NRCELLID=11,EPSFBPROTECTIONTIMER=20;
+MOD NRINTERRATHOPARAM:NRCELLID=11,HOMODESWITCH=EUTRAN_HO_SWITCH-1&EUTRAN_REDIRECT_SWITCH-1;
+MOD NRINTERRATHOPARAM:NRCELLID=11,HOMODESWITCH=EUTRAN_REDIRECT_SWITCH-1;
+MOD NRCELLINTERFHOMEAGRP:NRCELLID=11,INTERFREQHOMEASGROUPID=0, COVINTERFREQA2RSRPTHLD=-115;
+MOD NRCELLINTERFHOMEAGRP:NRCELLID=11,INTERFREQHOMEASGROUPID=0,COVINTERFREQA1RSRPTHLD=-113;
+MOD NRCELLINTERFHOMEAGRP:NRCELLID=11,INTERFREQHOMEASGROUPID=0,COVINTERFREQA5RSRPTHLD1=-115;
+MOD NRCELLINTERFHOMEAGRP:NRCELLID=11,INTERFREQHOMEASGROUPID=0,COVINTERFREQA5RSRPTHLD2=-103;
+MOD NRCELLINTERRHOMEAGRP:NRCELLID=11,INTERRATHOMEASGROUPID=0,COVHOTOEUTRANB2RSRPTHLD1=-117;
+MOD NRCELLINTERRHOMEAGRP:NRCELLID=11,INTERRATHOMEASGROUPID=0,COVHOTOEUTRANBLINDA2THLD=-117;
+MOD NRCELLINTERRHOMEAGRP:NRCELLID=11,INTERRATHOMEASGROUPID=0,INTERRATHOA2RSRPTHLD=-113;
+MOD NRCELLALGOSWITCH:NRCELLID=11,INTERRATSERVICEMOBILITYSW=MOBILITY_TO_EUTRAN_SW-1;
+ADD NRCELLHOEUTRANMEAGRP:NRCELLID=11,INTERRHOTOEUTRANMEASGRPID=2,COVBASEDHOB1RSRPTHLD=-115;
+MOD NRCELLRESELCONFIG:NRCELLID=11,MINIMUMRXLEVEL=-58;
+MOD NRCELLRESELCONFIG:NRCELLID=11,NONINTRAFREQMEASRSRPTHLD=2;
+MOD NRCELLNSADCCONFIG:NRCELLID=11,NRDATAVOLUMERPTCFG=65535;
+MOD NRCELLNSADCCONFIG:NRCELLID=11,NSADCALGOSWITCH=NSA_DC_PREALLOCATION_SW-1;
+MOD NRCELLNSADCCONFIG:NRCELLID=11,NSADCALGOSWITCH=UL_FALLBACK_TO_LTE_SWITCH-1;
+MOD NRCELLCOMP:NRCELLID=11,OVERLAPPINGRSRPOFFSET=-12,DLCOMPRSRPOFFSET=-12;
+MOD NRCELLCOMP:NRCELLID=11,OVERLAPPINGRSRPOFFSET=-12,DLCOMPRSRPOFFSET=-12;
+MOD NRCELLNSADCCONFIG:NRCELLID=11,PSCELLA2RSRPTHLD=-120;
+MOD NRCELLQCIBEARER:NRCELLID=11,QCI=1,HOQOSFLOWCONFLPROCSTRAT=QOS_FLOW_FIRST_SW-1;
+MOD NRCELLQCIBEARER:NRCELLID=11,QCI=1,INTERRHOTOEUTRANMEASGRPID=2;
+MOD NRCELLQCIBEARER:NRCELLID=11,QCI=5,HOQOSFLOWCONFLPROCSTRAT=QOS_FLOW_FIRST_SW-1;
+MOD NRCELLQCIBEARER:NRCELLID=11,QCI=9,HOQOSFLOWCONFLPROCSTRAT=QOS_FLOW_FIRST_SW-1;
+MOD NRCELLRSVD:NRCELLID=11,RSVDSWPARAM1=RSVDSWPARAM1_BIT7-1;
+MOD NRCELLRESELCONFIG:NRCELLID=11,SERVFREQLOWPRIRSRPRESELTHD=1;
+MOD NRCELLALGOSWITCH:NRCELLID=11,SPEEDTURBOSW=ST_UE_GUARANTEE_SW-1;
+MOD NRCELLALGOSWITCH:NRCELLID=11,VOICESTRATEGYSWITCH=EPS_FB_STRONGEST_NCELL_REDI_SW-1;
+MOD NRCELLALGOSWITCH:NRCELLID=11,VOICESTRATEGYSWITCH=EPS_FB_SWITCH-1;
+MOD NRDUCELLCARRMGMT:NRDUCELLID=11,CAENHANCEDALGOSWITCH=CARR_CSI_BEAM_SWEEPING_SW-1;
+MOD NRDUCELLDLSCHRES:NRDUCELLID=11,DLEXPOPTRBINCREASEPCT=20;
+MOD NRDUCELLPDSCH:NRDUCELLID=11,DLLINKADAPTALGOSWITCH=DL_TD_MCS_ADJ_SW-1;
+MOD NRDUCELLPDSCH:NRDUCELLID=11,DLLOWTIMECORRMUSW=ON;
+MOD NRDUCELLDLAMC:NRDUCELLID=11,DLMCSSELALGOSW=DL_MCS_ADJ_OPT_WT_CHANGE_SW-1;
+MOD NRDUCELLDLMIMO:NRDUCELLID=11,DLMUMIMOSCHSUPPLEMENTSW=DL_MCS_TABLE_ADAPT_ENH_SW-1;
+MOD NRDUCELLPDSCH:NRDUCELLID=11,DLPDSCHALGOSWITCH=RB_ESTIMATE_OPT_SW-1;
+MOD NRDUCELLPDSCH:NRDUCELLID=11,DLPDSCHALGOSWITCH=TBS_CALC_OPT_SW-1;
+MOD NRDUCELLDLRANK:NRDUCELLID=11,DLRANKDETECTCORRTHLD=100;
+MOD NRDUCELLPDSCH:NRDUCELLID=11,FIXEDAMCSTEPVALUE=80;
+MOD NRDUCELLCSIRS:NRDUCELLID=11,JTUECSIRSMEASTHLD=5;
+MOD NRDUCELLPDSCH:NRDUCELLID=11,MAXMIMOLAYERNUM=LAYER_6;
+MOD NRDUCELLSELCONFIG:NRDUCELLID=11,MINIMUMRXLEVEL=-58;
+MOD NRDUCELLPUSCH:NRDUCELLID=11,MINPREALLOCATIONPERIOD=1;
+MOD NRDUCELLULMIMO:NRDUCELLID=11,MURBRATIOTHLD=40;
+MOD NRDUCELLCSIRS:NRDUCELLID=11,NCELLCSIRSINTRFAVOID=P_CELL;
+MOD NRDUCELLUEPWRSAVING:NRDUCELLID=11,NRDUCELLDRXALGOSWITCH=DRX_CSI_SLOT_SHIFT_FOR_SR_SW-1;
+MOD NRDUCELLUEPWRSAVING:NRDUCELLID=11,NRDUCELLDRXALGOSWITCH=LNR_DRX_SYNCHRONIZE_SW-1;
+MOD NRDUCELLSRSMEAS:NRDUCELLID=11,NSAULFACKTOLTESINRHYST=15;
+MOD NRDUCELLSRSMEAS:NRDUCELLID=11,NSAULFACKTOLTESINRTHLD=-15;
+MOD NRDUCELLSRSMEAS:NRDUCELLID=11,NSAULFBTOLTESINROPTSW=SRS_CORRECTION_BASED_ON_PHR_SW-1;
+MOD NRDUCELLSRSMEAS:NRDUCELLID=11,NSAULFBTOLTESINROPTSW=SRS_EQUALIZATION_SW-1;
+MOD NRDUCELLSRSMEAS:NRDUCELLID=11,NSAULTOLTESINRTIMETOTRIG=1;
+MOD NRDUCELLPDCCH:NRDUCELLID=11,PDCCHAGGLEVEL1STRATEGY=ADAPT;
+MOD NRDUCELLPUSCH:NRDUCELLID=11,PRESCHUENUMUPPERLIMIT=10;
+MOD NRDUCELLPUCCH:NRDUCELLID=11,PUCCHRECEIVEENHSWITCH=PUCCH_MRC_IRC_SW-1;
+MOD NRDUCELLPUSCH:NRDUCELLID=11,PUSCHPERFORMANCESWITCH=FB_TO_LTE_UE_OPT_SW-1;
+MOD NRDUCELLPUSCH:NRDUCELLID=11,PUSCHPERFORMANCESWITCH=UE_PUSCH_RBLER_OPT_SW-1;
+MOD NRDUCELLPDCCH:NRDUCELLID=11,PWRSAVEBWPCCEADJUSTPOLICY=PWR_SAVING_BWP_NOT_CONSIDERED;
+MOD NRDUCELLPUSCH:NRDUCELLID=11,RETRANSBSRTIMER=SF320;
+MOD NRDUCELLRSVDEXT02:NRDUCELLID=11,RSVDPARAM0=1;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDPARAM124=2;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDPARAM134=2;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDPARAM153=30;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDPARAM154=30;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDPARAM155=30;
+MOD NRDUCELLRSVDEXT:NRDUCELLID=11,RSVDPARAM7=101;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDPARAM93=15;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDSWPARAM1=RSVDSWPARAM1_BIT11-1;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDSWPARAM1=RSVDSWPARAM1_BIT5-1;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDSWPARAM2=RSVDSWPARAM2_BIT16-1;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDSWPARAM2=RSVDSWPARAM2_BIT31-1;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDSWPARAM3=RSVDSWPARAM3_BIT14-1;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDSWPARAM3=RSVDSWPARAM3_BIT16-1;
+MOD NRDUCELLRSVDEXT01:NRDUCELLID=11,RSVDSWPARAM3=RSVDSWPARAM3_BIT31-1;
+MOD NRDUCELLRSVDEXT:NRDUCELLID=11,RSVDSWPARAM3=RSVDSWPARAM3_BIT9-1;
+MOD NRDUCELLPUSCH:NRDUCELLID=11,SPECIALUSERMCSIDXLOWAMOUNT=3;
+MOD NRDUCELLPUCCH:NRDUCELLID=11,SRRESOUREALGOSWITCH=ENHANCED_SR_PERIOD_ADAPT_SW-1;
+MOD NRDUCELLSRS:NRDUCELLID=11,SRSALGOEXTSWITCH=BWP0_SRS_ALLOC_SW-0;
+MOD NRDUCELLSRS:NRDUCELLID=11,SRSALGOEXTSWITCH=SRS_INTRF_COORD_S_SLOT_SW-1;
+MOD NRDUCELLSRS:NRDUCELLID=11,SRSALGOSWITCH=USER_CHARACTER_SRS_ADAPT_SW-1;
+MOD NRDUCELLSRS:NRDUCELLID=11,SRSWIDEBANDINDEXCSRS=63;
+MOD NRDUCELLULAMC:NRDUCELLID=11,ULAMCALGOSW=UL_AMC_STEP_ADAPT_SW-1;
+MOD NRDUCELLULAMC:NRDUCELLID=11,ULAMCALGOSW=UL_MAX_MODULATION_ORDER_OPT_SW-0;
+MOD NRDUCELLULAMC:NRDUCELLID=11,ULAMCALGOSW=UL_SCH_AVG_SINR_OPT_SW-1;
+MOD NRDUCELLULAMC:NRDUCELLID=11,ULAMCPERFORMANCESW=DEC_MCS_SCHEDUL_OL_OPT_SW-1;
+MOD NRDUCELLULAMC:NRDUCELLID=11,ULAMCPERFORMANCESW=SMALL_PKT_MCS_OPT_SW-1;
+MOD NRDUCELLULMIMO:NRDUCELLID=11,ULMUMIMOALGOSWITCH=BIG_PKT_ALIGN_PAIR_OPT_SW-1;
+MOD NRDUCELLULMIMO:NRDUCELLID=11,ULMUMIMOALGOSWITCH=BIG_PKT_UE_FREQ_SEL_SCH_OPT_SW-1;
+MOD NRDUCELLULMIMO:NRDUCELLID=11,ULMUMIMOALGOSWITCH=MU_BEAM_PAIR_OPT_SW-1;
+MOD NRDUCELLULMIMO:NRDUCELLID=11,ULMUMIMOALGOSWITCH=SML_PKT_ALIGN_PAIR_OPT_SW-1;
+MOD NRDUCELLULMIMO:NRDUCELLID=11,ULMUMIMOSINRTHLD=-20;
+MOD NRDUCELLPUSCH:NRDUCELLID=11,ULPUSCHALGOSWITCH=PUSCH_ACK_DTX_DETECT_SW-1;
+MOD NRDUCELLPUSCH:NRDUCELLID=11,ULSMARTPREALLOCATIONDUR=250;
+      </textarea>
+    </div>
+
+    <!-- Saída -->
+    <div class="card row" style="align-items:flex-start">
+      <div class="col">
+        <label>Saída gerada</label>
+        <textarea id="output" rows="30" readonly placeholder="O resultado aparecerá aqui..."></textarea>
+        <div class="meta">Total de linhas geradas: <span id="outCount" class="count">0</span></div>
+      </div>
+
+      <div style="width:240px">
+        <label class="inline">&nbsp;</label>
+        <div class="controls">
+          <button id="generate" class="small">Gerar</button>
+          <button id="copy" class="secondary small">Copiar</button>
+          <button id="download" class="small">Baixar .txt</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <button id="clearInput" class="ghost small">Limpar entradas</button>
+          <button id="clearOutput" class="ghost small">Limpar saída</button>
+        </div>
+
+        <div style="margin-top:12px" class="meta"><div id="lastOp" style="min-height:20px"></div></div>
+      </div>
+    </div>
+
+    <div class="footer card" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <div>
+        <strong>Desenvolvido por Eudenes Jr.</strong><br>
+        <span style="color:#666;">Ferramenta criada para automatização de Baseline da rede Huawei.</span><br>
+        <span style="font-size:12px; color:#999;">© <span id="ano"></span> Eudenes Jr. — Todos os direitos reservados.</span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:16px;">
+        <img src="https://logonoid.com/images/huawei-logo.png" alt="Huawei Logo" height="28">
+        <img src="https://www.telebit.it/wp-content/uploads/2024/12/logo.svg" alt="Telebit Logo" height="32" style="border-radius:4px;">
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('ano').textContent = new Date().getFullYear();
+
+    const input4G = document.getElementById('input4G');
+    const input5G = document.getElementById('input5G');
+    const templatesEl = document.getElementById('templates');
+    const outputEl = document.getElementById('output');
+    const count4G = document.getElementById('count4G');
+    const count5G = document.getElementById('count5G');
+    const outCountEl = document.getElementById('outCount');
+    const lastOpEl = document.getElementById('lastOp');
+
+    function parseLines(textarea) {
+      return textarea.value.replace(/\r/g,'').split('\n').map(l => l.trim()).filter(l => l !== '');
+    }
+
+    function replace4G(template, id) {
+      return template.replace(/LOCALCELLID=[^,;]+/gi, 'LOCALCELLID=' + id);
+    }
+
+    function replace5G(template, id) {
+      return template
+        .replace(/NRCELLID=[^,;]+/gi, 'NRCELLID=' + id)
+        .replace(/NRDUCELLID=[^,;]+/gi, 'NRDUCELLID=' + id);
+    }
+
+    function generate() {
+      const templates = templatesEl.value.split('\n').map(t => t.trim()).filter(t => t !== '');
+      const lines4G = parseLines(input4G);
+      const lines5G = parseLines(input5G);
+
+      count4G.textContent = lines4G.length;
+      count5G.textContent = lines5G.length;
+      lastOpEl.textContent = '';
+
+      if (templates.length === 0) {
+        lastOpEl.innerHTML = '<span class="error">Nenhum template definido.</span>';
+        return;
+      }
+
+      const results = [];
+
+      for (const tpl of templates) {
+        if (/LOCALCELLID=/i.test(tpl)) {
+          for (const id of lines4G) results.push(replace4G(tpl, id));
+        } else if (/NRCELLID=|NRDUCELLID=/i.test(tpl)) {
+          for (const id of lines5G) results.push(replace5G(tpl, id));
+        } else {
+          results.push(tpl); // sem placeholder detectado
+        }
+      }
+
+      outputEl.value = results.join('\n');
+      outCountEl.textContent = results.length;
+      lastOpEl.textContent = 'Geração concluída — veja a saída.';
+    }
+
+    document.getElementById('generate').addEventListener('click', generate);
+
+    document.getElementById('copy').addEventListener('click', () => {
+      if (!outputEl.value) return;
+      outputEl.select();
+      document.execCommand('copy');
+      lastOpEl.textContent = 'Conteúdo copiado para a área de transferência.';
+      window.getSelection().removeAllRanges();
+    });
+
+    document.getElementById('download').addEventListener('click', () => {
+      if (!outputEl.value) return;
+      const blob = new Blob([outputEl.value], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'resultado_baseline.txt';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      lastOpEl.textContent = 'Arquivo gerado para download.';
+    });
+
+    document.getElementById('clearInput').addEventListener('click', () => {
+      input4G.value = '';
+      input5G.value = '';
+      count4G.textContent = '0';
+      count5G.textContent = '0';
+      lastOpEl.textContent = 'Entradas limpas.';
+    });
+
+    document.getElementById('clearOutput').addEventListener('click', () => {
+      outputEl.value = '';
+      outCountEl.textContent = '0';
+      lastOpEl.textContent = 'Saída limpa.';
+    });
+
+    input4G.addEventListener('input', () => count4G.textContent = parseLines(input4G).length);
+    input5G.addEventListener('input', () => count5G.textContent = parseLines(input5G).length);
+  </script>
+</body>
+</html>
