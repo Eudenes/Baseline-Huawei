@@ -78,6 +78,13 @@ table.hist{border-collapse:collapse;width:100%;font-size:12.5px}
 .hist tr:hover td{background:var(--c-alt)}
 .hist .ne{font-family:var(--mono);font-weight:700}
 .hist .act{display:flex;gap:6px}
+.gh-box{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--c-border);border-radius:8px;padding:7px 10px;margin:0 0 8px;font-size:13px;background:var(--c-alt)}
+.gh-st{font-size:12.5px;padding:2px 8px;border-radius:10px}
+.gh-st.ok{background:#e3f6ea;color:#17663a}.gh-st.busy{background:#fff4e0;color:#8a5a00}.gh-st.err{background:#fde8e8;color:#a32020}.gh-st.off{background:#eef0f4;color:#5b6474}
+.gh-cfg{display:flex;gap:8px;flex-wrap:wrap;align-items:center;border:1px dashed var(--c-border);border-radius:8px;padding:8px 10px;margin:0 0 8px}
+.gh-cfg input{flex:1 1 320px;border:1px solid var(--c-border);border-radius:6px;padding:7px 9px;font:13px var(--font)}
+.gh-cfg .msg{flex-basis:100%}
+.pill.gh{background:#e6effc;color:#1f4e9a}
 .pill{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:9px;background:#eceef2;color:var(--c-muted);margin-right:3px}
 .pill.ok{background:var(--c-okbg);color:var(--c-ok)}
 #histMsg:empty{display:none}
@@ -601,7 +608,21 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
   </div>
   <section class="result" id="histSec">
     <h2>Histórico de sites coletados</h2>
-    <p class="instr">Cada site processado fica salvo <strong>neste navegador</strong> (rodada 1, rodada 2, edições da matriz Inter-Freq/CA, RRU Name editados e entradas do Baseline). Clique em <strong>Abrir</strong> para recarregar todas as abas com as informações do site. Use <strong>Exportar</strong> para guardar um backup (.json) ou levar para outro computador.</p>
+    <p class="instr">Cada site processado fica salvo <strong>neste navegador</strong> e, com o acesso configurado, também <strong>no GitHub</strong> (pasta <code>historico</code> do repositório) — assim aparece em qualquer computador (rodada 1, rodada 2 com data/hora, edições da matriz Inter-Freq/CA, RRU Name editados e entradas do Baseline). Clique em <strong>Abrir</strong> para recarregar todas as abas com as informações do site.</p>
+    <div class="gh-box">
+      <b>☁ Histórico compartilhado (GitHub)</b>
+      <span id="ghStatus" class="gh-st off"></span>
+      <span style="flex:1"></span>
+      <button class="ghost sm" type="button" id="ghSync">Atualizar agora</button>
+      <button class="ghost sm" type="button" id="ghCfg">Configurar acesso</button>
+    </div>
+    <div class="gh-cfg" id="ghCfgBox" hidden>
+      <input type="password" id="ghTok" placeholder="Cole aqui o token do GitHub (começa com github_pat_)" autocomplete="off">
+      <button class="primary sm" type="button" id="ghSave">Salvar e testar</button>
+      <button class="danger sm" type="button" id="ghForget">Remover deste computador</button>
+      <div class="msg" id="ghCfgMsg"></div>
+      <p class="muted" style="margin:4px 0 0;font-size:12px">O token fica guardado só neste navegador. Cada computador precisa colar o token uma vez.</p>
+    </div>
     <div class="hist-bar">
       <input type="search" id="histFilter" placeholder="Filtrar por site...">
       <span class="muted" id="histCount"></span>
@@ -4665,12 +4686,14 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   $("blFill").addEventListener("click", function () { fillBaseline(false); scheduleSave(); });
 
   // ---------- histórico ----------
+  // Fica salvo neste navegador (localStorage) e, com o token configurado,
+  // também no GitHub: historico/index.json (resumo) + historico/<id>.json (site completo).
   var HKEY = "baselineHuawei.historico.v1";
-  var cur = { id: null, ne: "", r1: "", r2: "", r2At: null }, loading = false, saveT = null;
+  var cur = { id: null, ne: "", r1: "", r2: "", r2At: null, created: null }, loading = false, saveT = null;
   function hLoad() { try { return JSON.parse(localStorage.getItem(HKEY) || "[]"); } catch (e) { return []; } }
   function hWrite(list) {
     try { localStorage.setItem(HKEY, JSON.stringify(list)); return true; }
-    catch (e) { histMsg("Não foi possível salvar no histórico (armazenamento do navegador cheio ou bloqueado). Exporte o histórico e apague sites antigos.", "warn"); return false; }
+    catch (e) { histMsg("Não foi possível salvar no histórico deste navegador (armazenamento cheio ou bloqueado)." + (ghToken() ? " O site continua sendo enviado ao GitHub." : " Exporte o histórico e apague sites antigos."), "warn"); return false; }
   }
   function histMsg(t, type) { var el = $("histMsg"); el.textContent = t || ""; el.className = t ? "msg " + (type || "ok") : "msg"; }
   function neFrom(text) {
@@ -4686,42 +4709,204 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
       cells: window.PL_TOOL.cellCount(), boards: parseInt($("statTotal").textContent, 10) || 0
     };
   }
+  // indicadores (funcionam tanto no registro completo quanto no resumo vindo do GitHub)
+  function flags(e) {
+    if (e.full === false) return { r2: !!e.hasR2, ca: !!e.hasCa, rru: !!e.hasRru, pw: !!e.hasPw };
+    return {
+      r2: !!e.r2,
+      ca: !!(e.ca && Object.keys(e.ca).some(function (k) { return e.ca[k] && Object.keys(e.ca[k]).length; })),
+      rru: !!(e.rru && Object.keys(e.rru).length),
+      pw: !!(e.pw && e.pw.c && Object.keys(e.pw.c).length)
+    };
+  }
+  function summary(e) {
+    var f = flags(e);
+    return { id: e.id, ne: e.ne, created: e.created, updated: e.updated, r2At: e.r2At || null, cells: e.cells || 0, boards: e.boards || 0,
+      hasR2: f.r2, hasCa: f.ca, hasRru: f.rru, hasPw: f.pw, full: false };
+  }
   function saveNow() {
     clearTimeout(saveT); saveT = null;
     if (!cur.r1 || loading) return;
     var list = hLoad(), s = snapshot(), now = Date.now(), e = null;
     if (cur.id) e = list.filter(function (x) { return x.id === cur.id; })[0];
     if (e && Object.keys(s).every(function (k) { return JSON.stringify(e[k]) === JSON.stringify(s[k]); })) return;
-    if (!e) { e = { id: cur.id || ("h" + now), created: now }; cur.id = e.id; list.push(e); }
+    if (!e) { e = { id: cur.id || ("h" + now), created: cur.created || now }; cur.id = e.id; list.push(e); }
     Object.keys(s).forEach(function (k) { e[k] = s[k]; });
     e.updated = now;
-    if (hWrite(list)) renderHist();
+    cur.created = e.created;
+    hWrite(list);
+    if (ghToken()) { ghLocalCopy[e.id] = e; ghQueue(e.id, 20000); }
+    renderHist();
   }
   function scheduleSave() { if (!cur.r1 || loading) return; clearTimeout(saveT); saveT = setTimeout(saveNow, 800); }
+
+  // ---------- GitHub ----------
+  var GH = { owner: "Eudenes", repo: "Baseline-Huawei", branch: "main", dir: "historico" };
+  var GH_TKEY = "baselineHuawei.githubToken.v1";
+  var remote = [], remoteDel = {}, ghLoaded = false, ghBusy = 0, ghErr = "", ghLast = 0;
+  var ghPend = {}, ghTimers = {}, ghChain = Promise.resolve(), ghLocalCopy = {};
+  function ghToken() { try { return localStorage.getItem(GH_TKEY) || ""; } catch (e) { return ""; } }
+  function ghApi(method, url, body, raw) {
+    var h = { "Authorization": "Bearer " + ghToken(), "Accept": raw ? "application/vnd.github.raw+json" : "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+    if (body) h["Content-Type"] = "application/json";
+    return fetch(url, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined, cache: "no-store" }).then(function (r) {
+      if (r.status === 404 && method === "GET") return null;
+      if (!r.ok) return r.text().then(function (t) {
+        var msg = "GitHub " + r.status;
+        try { msg += ": " + JSON.parse(t).message; } catch (x) { msg += ": " + t.slice(0, 160); }
+        var err = new Error(msg); err.status = r.status; throw err;
+      });
+      return raw ? r.text() : r.json();
+    });
+  }
+  function ghPath(p) { return "https://api.github.com/repos/" + GH.owner + "/" + GH.repo + "/contents/" + p; }
+  function ghGet(p, raw) { return ghApi("GET", ghPath(p) + "?ref=" + GH.branch, null, raw); }
+  function b64enc(str) { var u = new TextEncoder().encode(str), s = "", C = 0x8000; for (var i = 0; i < u.length; i += C) s += String.fromCharCode.apply(null, u.subarray(i, i + C)); return btoa(s); }
+  function b64dec(b) { var bin = atob(String(b).replace(/\s/g, "")), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new TextDecoder().decode(u); }
+  // lê um .json do repositório → { sha, data } (arquivos > 1 MB vêm pelo modo "raw")
+  function ghGetJson(p) {
+    return ghGet(p).then(function (m) {
+      if (!m) return null;
+      if (m.content && m.encoding === "base64") return { sha: m.sha, data: JSON.parse(b64dec(m.content)) };
+      return ghGet(p, true).then(function (t) { return { sha: m.sha, data: JSON.parse(t) }; });
+    });
+  }
+  function ghPut(p, obj, sha, msg) {
+    var body = { message: msg, content: b64enc(JSON.stringify(obj)), branch: GH.branch };
+    if (sha) body.sha = sha;
+    return ghApi("PUT", ghPath(p), body);
+  }
+  // atualiza historico/index.json com nova tentativa em caso de conflito (duas máquinas salvando juntas)
+  function ghIndexUpdate(fn, msg, tries) {
+    tries = tries || 0;
+    return ghGetJson(GH.dir + "/index.json").then(function (g) {
+      var ix = g ? g.data : { app: "BaselineHuawei", v: 1, sites: [], deleted: {} };
+      ix.sites = ix.sites || []; ix.deleted = ix.deleted || {};
+      fn(ix);
+      return ghPut(GH.dir + "/index.json", ix, g && g.sha, msg).then(function () { return ix; });
+    }).catch(function (err) {
+      if ((err.status === 409 || err.status === 422) && tries < 4) return new Promise(function (ok) { setTimeout(ok, 700 + Math.random() * 900); }).then(function () { return ghIndexUpdate(fn, msg, tries + 1); });
+      throw err;
+    });
+  }
+  function ghApplyIndex(ix) {
+    remote = (ix && ix.sites) || []; remoteDel = (ix && ix.deleted) || {};
+    remote.forEach(function (s) { s.full = false; });
+    ghLoaded = true;
+  }
+  function ghRun(task) {
+    ghBusy++; ghStatus();
+    ghChain = ghChain.then(task).then(function () { ghErr = ""; ghLast = Date.now(); }, function (err) { ghErr = err && err.message ? err.message : String(err); })
+      .then(function () { ghBusy--; ghStatus(); renderHist(); });
+    return ghChain;
+  }
+  // envia um site (arquivo completo + resumo no índice)
+  function ghPush(id) {
+    return ghRun(function () {
+      delete ghPend[id];
+      var e = hLoad().filter(function (x) { return x.id === id; })[0] || ghLocalCopy[id];
+      if (!e || !e.r1) return;
+      var rs = remote.filter(function (x) { return x.id === id; })[0];
+      if (rs && (rs.updated || 0) >= (e.updated || 0)) return; // GitHub já tem esta versão
+      var p = GH.dir + "/" + id + ".json", data = {};
+      Object.keys(e).forEach(function (k) { if (k !== "synced") data[k] = e[k]; });
+      return ghGet(p).then(function (m) {
+        return ghPut(p, data, m && m.sha, "Histórico: " + e.ne + " (" + fmt(e.updated) + ")");
+      }).then(function () {
+        return ghIndexUpdate(function (ix) {
+          ix.sites = ix.sites.filter(function (s) { return s.id !== id; });
+          var s = summary(e); delete s.full; ix.sites.push(s);
+          delete ix.deleted[id];
+        }, "Histórico (índice): " + e.ne);
+      }).then(function (ix) {
+        ghApplyIndex(ix);
+        delete ghLocalCopy[id];
+        var list = hLoad(), l = list.filter(function (x) { return x.id === id; })[0];
+        if (l) { l.synced = e.updated; hWrite(list); }
+      });
+    });
+  }
+  function ghQueue(id, delay) {
+    if (!ghToken()) return;
+    ghPend[id] = 1; ghStatus();
+    clearTimeout(ghTimers[id]);
+    ghTimers[id] = setTimeout(function () { delete ghTimers[id]; ghPush(id); }, delay || 0);
+  }
+  function ghFlush() { Object.keys(ghTimers).forEach(function (id) { clearTimeout(ghTimers[id]); delete ghTimers[id]; ghPush(id); }); }
+  // baixa o índice; apaga localmente o que foi excluído em outra máquina; envia o que só existe aqui
+  function ghPull() {
+    if (!ghToken()) { ghStatus(); return Promise.resolve(); }
+    return ghRun(function () {
+      return ghGetJson(GH.dir + "/index.json").then(function (g) {
+        ghApplyIndex(g ? g.data : null);
+        var list = hLoad(), rm = {}, changed = false;
+        remote.forEach(function (s) { rm[s.id] = s; });
+        list = list.filter(function (e) {
+          var d = remoteDel[e.id];
+          if (d && (e.updated || 0) <= d) { changed = true; if (cur.id === e.id) cur.id = null; return false; }
+          return true;
+        });
+        if (changed) hWrite(list);
+        list.forEach(function (e) {
+          var s = rm[e.id];
+          if (!remoteDel[e.id] && (!s || (e.updated || 0) > (s.updated || 0))) ghPend[e.id] = 1;
+        });
+      });
+    }).then(function () { Object.keys(ghPend).forEach(function (id) { if (!ghTimers[id]) ghQueue(id, 0); }); });
+  }
+  function ghStatus() {
+    var el = $("ghStatus"); if (!el) return;
+    var n = Object.keys(ghPend).length, t, c;
+    if (!ghToken()) { t = "Desligado — o histórico está só neste navegador. Clique em Configurar acesso."; c = "off"; }
+    else if (ghBusy) { t = "Sincronizando com o GitHub..."; c = "busy"; }
+    else if (ghErr) { t = "Erro: " + ghErr + (/401|403/.test(ghErr) ? " — confira o token em Configurar acesso." : ""); c = "err"; }
+    else if (n) { t = n + " site(s) aguardando envio ao GitHub..."; c = "busy"; }
+    else if (ghLoaded) { t = "Sincronizado com o GitHub" + (ghLast ? " às " + new Date(ghLast).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "") + " · " + remote.length + " site(s) na nuvem"; c = "ok"; }
+    else { t = "Conectando ao GitHub..."; c = "busy"; }
+    el.textContent = t; el.className = "gh-st " + c;
+  }
+  function allEntries() {
+    var m = {};
+    hLoad().forEach(function (e) { m[e.id] = e; });
+    remote.forEach(function (s) {
+      var l = m[s.id];
+      if (!l || (s.updated || 0) > (l.updated || 0)) m[s.id] = s;
+    });
+    return Object.keys(m).map(function (k) { return m[k]; });
+  }
+  function whereTag(e) {
+    if (!ghToken()) return "";
+    var s = remote.filter(function (x) { return x.id === e.id; })[0];
+    if (e.full === false) return '<span class="pill gh">☁ no GitHub</span>';
+    if (ghPend[e.id]) return '<span class="pill">⏳ enviando</span>';
+    if (s && (s.updated || 0) >= (e.updated || 0)) return '<span class="pill gh">☁ no GitHub</span>';
+    return '<span class="pill">só neste PC</span>';
+  }
   function renderHist() {
-    var list = hLoad().sort(function (a, b) { return b.updated - a.updated; });
+    var list = allEntries().sort(function (a, b) { return b.updated - a.updated; });
     var q = $("histFilter").value.trim().toLowerCase();
     var vis = list.filter(function (e) { return !q || String(e.ne).toLowerCase().indexOf(q) !== -1; });
     $("histCount").textContent = list.length ? vis.length + " de " + list.length + " coleta(s)" : "";
     var h = "<thead><tr><th>Site</th><th>Coletado em</th><th>Rodada 2 em</th><th>Atualizado em</th><th>Células</th><th>Placas</th><th>Conteúdo</th><th></th></tr></thead><tbody>";
     if (!vis.length) h += '<tr><td colspan="8" class="muted">' + (list.length ? "Nenhum site corresponde ao filtro." : "Nenhum site no histórico ainda. Processe uma entrada para salvar.") + "</td></tr>";
     vis.forEach(function (e) {
-      var ed = e.ca && Object.keys(e.ca).some(function (k) { return e.ca[k] && Object.keys(e.ca[k]).length; });
-      h += '<tr class="' + (e.id === cur.id ? "cur" : "") + '"><td class="ne">' + esc(e.ne) + "</td><td>" + fmt(e.created) + "</td><td>" + (e.r2At ? fmt(e.r2At) : (e.r2 ? '<span class="muted">sem registro</span>' : "—")) + "</td><td>" + fmt(e.updated) + "</td><td>" + (e.cells || 0) + "</td><td>" + (e.boards || 0) +
-        '</td><td><span class="pill ok">Rodada 1</span>' + (e.r2 ? '<span class="pill ok">Rodada 2</span>' : '<span class="pill">sem rodada 2</span>') +
-        (ed ? '<span class="pill ok">edições CA</span>' : "") + (e.rru && Object.keys(e.rru).length ? '<span class="pill ok">RRU Name</span>' : "") + (e.pw && e.pw.c && Object.keys(e.pw.c).length ? '<span class="pill ok">edições Potência</span>' : "") +
+      var f = flags(e);
+      h += '<tr class="' + (e.id === cur.id ? "cur" : "") + '"><td class="ne">' + esc(e.ne) + "</td><td>" + fmt(e.created) + "</td><td>" + (e.r2At ? fmt(e.r2At) : (f.r2 ? '<span class="muted">sem registro</span>' : "—")) + "</td><td>" + fmt(e.updated) + "</td><td>" + (e.cells || 0) + "</td><td>" + (e.boards || 0) +
+        '</td><td>' + whereTag(e) + '<span class="pill ok">Rodada 1</span>' + (f.r2 ? '<span class="pill ok">Rodada 2</span>' : '<span class="pill">sem rodada 2</span>') +
+        (f.ca ? '<span class="pill ok">edições CA</span>' : "") + (f.rru ? '<span class="pill ok">RRU Name</span>' : "") + (f.pw ? '<span class="pill ok">edições Potência</span>' : "") +
         '</td><td class="act"><button class="primary sm" type="button" data-hopen="' + esc(e.id) + '">' + (e.id === cur.id ? "Recarregar" : "Abrir") + '</button><button class="danger sm" type="button" data-hdel="' + esc(e.id) + '">Excluir</button></td></tr>';
     });
     $("histTbl").innerHTML = h + "</tbody>";
     var qs = $("histQuick"), keep = cur.id || "";
     qs.innerHTML = '<option value="">— histórico (' + list.length + ") —</option>" + list.map(function (e) { return '<option value="' + esc(e.id) + '"' + (e.id === keep ? " selected" : "") + ">" + esc(e.ne) + " · " + fmt(e.updated) + "</option>"; }).join("");
+    ghStatus();
   }
-  function openEntry(id) {
-    var e = hLoad().filter(function (x) { return x.id === id; })[0]; if (!e) return;
+  function openLocal(e) {
     loading = true;
     try {
       $("uniIn").value = e.r1;
       process(e.r1, e.id);
+      cur.created = e.created;
       if (e.r2) { cur.r2 = e.r2; cur.r2At = e.r2At || null; $("in2").value = e.r2; $("btn2").click(); }
       if (e.ca) window.CA_TOOL.setEdits(e.ca);
       window.PL_TOOL.setRru(e.rru || {});
@@ -4732,22 +4917,48 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     badges(); renderHist();
     histMsg("Site " + e.ne + " carregado (coleta de " + fmt(e.created) + ").", "ok");
   }
+  function openEntry(id) {
+    var l = hLoad().filter(function (x) { return x.id === id; })[0], r = remote.filter(function (x) { return x.id === id; })[0];
+    if (r && ghToken() && (!l || (r.updated || 0) > (l.updated || 0))) {
+      histMsg("Baixando " + r.ne + " do GitHub...", "ok");
+      ghGetJson(GH.dir + "/" + id + ".json").then(function (g) {
+        if (!g) throw new Error("arquivo historico/" + id + ".json não encontrado no GitHub");
+        var e = g.data; e.synced = e.updated;
+        var list = hLoad().filter(function (x) { return x.id !== id; }); list.push(e); hWrite(list);
+        openLocal(e);
+      }).catch(function (err) { histMsg("Não consegui baixar o site do GitHub: " + (err.message || err), "warn"); });
+      return;
+    }
+    if (l) openLocal(l);
+  }
   $("histTbl").addEventListener("click", function (ev) {
     var o = ev.target.closest("[data-hopen]"), d = ev.target.closest("[data-hdel]");
     if (o) openEntry(o.getAttribute("data-hopen"));
     if (d) {
-      var id = d.getAttribute("data-hdel"), list = hLoad(), e = list.filter(function (x) { return x.id === id; })[0];
-      if (!e || !confirm("Excluir o site " + e.ne + " (" + fmt(e.created) + ") do histórico?")) return;
-      hWrite(list.filter(function (x) { return x.id !== id; }));
+      var id = d.getAttribute("data-hdel"), e = allEntries().filter(function (x) { return x.id === id; })[0];
+      var inGh = remote.some(function (x) { return x.id === id; }) && ghToken();
+      if (!e || !confirm("Excluir o site " + e.ne + " (" + fmt(e.created) + ") do histórico" + (inGh ? " — deste navegador E do GitHub (some para todas as máquinas)" : "") + "?")) return;
+      hWrite(hLoad().filter(function (x) { return x.id !== id; }));
+      delete ghPend[id]; clearTimeout(ghTimers[id]); delete ghTimers[id];
       if (cur.id === id) cur.id = null;
+      if (inGh) {
+        ghRun(function () {
+          var p = GH.dir + "/" + id + ".json";
+          return ghGet(p).then(function (m) {
+            if (m) return ghApi("DELETE", ghPath(p), { message: "Histórico: exclui " + e.ne, sha: m.sha, branch: GH.branch });
+          }).then(function () {
+            return ghIndexUpdate(function (ix) { ix.sites = ix.sites.filter(function (s) { return s.id !== id; }); ix.deleted[id] = Date.now(); }, "Histórico (índice): exclui " + e.ne);
+          }).then(ghApplyIndex);
+        });
+      }
       renderHist();
     }
   });
   $("histQuick").addEventListener("change", function () { if (this.value) { openEntry(this.value); } });
   $("histFilter").addEventListener("input", renderHist);
   $("histClear").addEventListener("click", function () {
-    if (!hLoad().length || !confirm("Apagar TODO o histórico de sites deste navegador?")) return;
-    localStorage.removeItem(HKEY); cur.id = null; renderHist(); histMsg("Histórico apagado.", "ok");
+    if (!hLoad().length || !confirm("Apagar o histórico guardado NESTE navegador? (o que já está no GitHub continua lá)")) return;
+    localStorage.removeItem(HKEY); cur.id = null; renderHist(); histMsg("Histórico deste navegador apagado.", "ok");
   });
   $("histExport").addEventListener("click", function () {
     var list = hLoad(); if (!list.length) { histMsg("Histórico vazio.", "warn"); return; }
@@ -4762,27 +4973,56 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
       try {
         var d = JSON.parse(rd.result), inc = Array.isArray(d) ? d : d.sites;
         if (!Array.isArray(inc)) throw new Error("formato");
-        var list = hLoad(), ids = {}, n = 0;
+        var list = hLoad(), ids = {}, n = 0, chg = [];
         list.forEach(function (e) { ids[e.id] = e; });
-        inc.forEach(function (e) { if (!e || !e.id || !e.r1) return; if (!ids[e.id] || (e.updated || 0) > (ids[e.id].updated || 0)) { ids[e.id] = e; n++; } });
-        if (hWrite(Object.keys(ids).map(function (k) { return ids[k]; }))) { renderHist(); histMsg(n + " coleta(s) importada(s)/atualizada(s).", "ok"); }
+        inc.forEach(function (e) { if (!e || !e.id || !e.r1) return; if (!ids[e.id] || (e.updated || 0) > (ids[e.id].updated || 0)) { ids[e.id] = e; n++; chg.push(e.id); } });
+        if (hWrite(Object.keys(ids).map(function (k) { return ids[k]; }))) {
+          chg.forEach(function (id) { ghQueue(id, 0); });
+          renderHist(); histMsg(n + " coleta(s) importada(s)/atualizada(s)" + (ghToken() && n ? " e enviada(s) ao GitHub" : "") + ".", "ok");
+        }
       } catch (x) { histMsg("Arquivo inválido — use um .json exportado por esta ferramenta.", "warn"); }
       ev.target.value = "";
     };
     rd.readAsText(f);
   });
+  // configuração do acesso ao GitHub (token fica só neste navegador)
+  $("ghCfg").addEventListener("click", function () { $("ghCfgBox").hidden = !$("ghCfgBox").hidden; $("ghTok").value = ""; $("ghCfgMsg").textContent = ""; });
+  $("ghSync").addEventListener("click", function () { ghFlush(); ghPull(); });
+  $("ghSave").addEventListener("click", function () {
+    var t = $("ghTok").value.trim(), m = $("ghCfgMsg");
+    if (!t) { m.textContent = "Cole o token antes de salvar."; m.className = "msg warn"; return; }
+    m.textContent = "Testando o token..."; m.className = "msg";
+    fetch("https://api.github.com/repos/" + GH.owner + "/" + GH.repo, { headers: { "Authorization": "Bearer " + t, "Accept": "application/vnd.github+json" }, cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("GitHub " + r.status + (r.status === 401 ? " (token inválido ou expirado)" : r.status === 404 ? " (token sem acesso ao repositório " + GH.repo + ")" : ""))); })
+      .then(function (repo) {
+        if (repo.permissions && !repo.permissions.push) throw new Error("o token só tem leitura — marque Contents: Read and write");
+        localStorage.setItem(GH_TKEY, t);
+        m.textContent = "Acesso salvo neste computador ✓"; m.className = "msg ok";
+        $("ghCfgBox").hidden = true;
+        ghPull();
+      })
+      .catch(function (err) { m.textContent = "Não funcionou: " + (err.message || err); m.className = "msg warn"; });
+  });
+  $("ghForget").addEventListener("click", function () {
+    if (!confirm("Remover o acesso ao GitHub deste computador? (o histórico no GitHub não é apagado)")) return;
+    try { localStorage.removeItem(GH_TKEY); } catch (x) {}
+    remote = []; remoteDel = {}; ghLoaded = false; ghPend = {}; ghErr = "";
+    $("ghCfgBox").hidden = true; renderHist();
+  });
+  setInterval(function () { if (ghToken() && !ghBusy && document.visibilityState === "visible") ghPull(); }, 120000);
+  window.addEventListener("focus", function () { if (ghToken() && !ghBusy && Date.now() - ghLast > 30000) ghPull(); });
 
   // ---------- processamento ----------
   function process(t, fromId) {
     var caOk = window.CA_TOOL.run(t);
     window.PL_TOOL.run1(t);
     if (window.PW_TOOL) window.PW_TOOL.setText(t);
-    cur.r1 = t; cur.r2 = ""; cur.r2At = null; cur.ne = neFrom(t);
+    cur.r1 = t; cur.r2 = ""; cur.r2At = null; cur.created = null; cur.ne = neFrom(t);
     $("neLbl").textContent = cur.ne;
     if (fromId) cur.id = fromId;
     else {
       var same = hLoad().filter(function (e) { return e.ne === cur.ne && e.r1 === t; })[0];
-      cur.id = same ? same.id : null;
+      cur.id = same ? same.id : null; cur.created = same ? same.created : null;
       if (same && same.r2) { /* mesma coleta: mantém rodada 2 salva */ cur.r2 = same.r2; cur.r2At = same.r2At || null; $("in2").value = same.r2; $("btn2").click(); }
     }
     return caOk;
@@ -4795,7 +5035,8 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     fillBaseline(true);
     badges();
     saveNow();
-    histMsg("Site " + cur.ne + " salvo no histórico.", "ok");
+    if (cur.id) ghQueue(cur.id, 0);
+    histMsg("Site " + cur.ne + " salvo no histórico" + (ghToken() ? " e enviado ao GitHub" : "") + ".", "ok");
   }
   $("uniGo").addEventListener("click", runAll);
   $("uniSample").addEventListener("click", function () { $("uniIn").value = window.CA_TOOL.sample; runAll(); });
@@ -4806,7 +5047,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     window.CA_TOOL.clear();
     window.PL_TOOL.reset();
     if (window.PW_TOOL) window.PW_TOOL.reset();
-    cur = { id: null, ne: "", r1: "", r2: "", r2At: null };
+    cur = { id: null, ne: "", r1: "", r2: "", r2At: null, created: null };
     $("input4G").value = ""; $("input5G").value = ""; $("count4G").textContent = "0"; $("count5G").textContent = "0"; $("blFillMsg").textContent = "";
     badges(); renderHist(); histMsg("");
     show("in");
@@ -4840,7 +5081,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   // rodada 2: salva no histórico e atualiza indicadores
   $("btn2").addEventListener("click", function () {
     setTimeout(function () {
-      if (!loading && cur.r1 && $("in2").value !== cur.r2) { cur.r2 = $("in2").value; cur.r2At = Date.now(); saveNow(); histMsg("Rodada 2 de " + cur.ne + " registrada em " + fmt(cur.r2At) + ".", "ok"); }
+      if (!loading && cur.r1 && $("in2").value !== cur.r2) { cur.r2 = $("in2").value; cur.r2At = Date.now(); saveNow(); if (cur.id) ghQueue(cur.id, 0); histMsg("Rodada 2 de " + cur.ne + " registrada em " + fmt(cur.r2At) + ".", "ok"); }
       if (window.PW_TOOL) window.PW_TOOL.render();
       badges();
     }, 0);
@@ -4850,8 +5091,12 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     ["click", "change", "input"].forEach(function (ev) { $(p).addEventListener(ev, scheduleSave); });
   });
   ["input4G", "input5G"].forEach(function (id) { $(id).addEventListener("input", function () { setTimeout(badges, 0); }); });
-  window.addEventListener("beforeunload", function () { if (saveT) saveNow(); });
+  window.addEventListener("beforeunload", function (ev) {
+    if (saveT) saveNow();
+    if (Object.keys(ghTimers).length) { ghFlush(); ev.preventDefault(); ev.returnValue = ""; }
+  });
   renderHist();
+  ghPull();
   badges();
   show("in");
 })();
