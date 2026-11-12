@@ -310,6 +310,8 @@ button.ghost:hover{ border-color: var(--accent); color: var(--accent); }
 .scB .pport.l{ align-self: flex-start; }
 .scB .pport .pt{ color: #DDE7FA; }
 .scB .pport.ant{ background: #2E6FD0; }
+.scB .pport.free{ background: #E9ECF3; color: #6B7280; border: 1px dashed #9AA3B2; font-weight: 500; }
+.scB .pport.free .pt{ color: #8A93A3; }
 .scB .chips{ display: flex; gap: 4px; flex-wrap: wrap; }
 .scB .chip{ font-family: Consolas, "Courier New", monospace; font-size: 11px; border: 1px solid #2E6FD0; color: #2E6FD0; border-radius: 4px; padding: 0 5px; }
 .scB svg.psvg{ position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; overflow: visible; }
@@ -3419,6 +3421,12 @@ window.CA_TOOL={
       var b = M.nodes["B:" + k] || node("B:" + k, { t: "B", k: k, cab: c.cab, srn: c.srn, slot: c.slot, ports: {} });
       b.ports[c.port] = c;
     });
+    // placas BBP sem nenhuma RRU chain também aparecem (com as 6 portas livres)
+    Object.keys(boards).forEach(function (bk) {
+      var bd = boards[bk]; if (!isBbpBoard(bd)) return;
+      var k = rkey(bd.cab, bd.srn, bd.slot);
+      if (!M.nodes["B:" + k]) node("B:" + k, { t: "B", k: k, cab: bd.cab, srn: bd.srn, slot: bd.slot, ports: {} });
+    });
     Object.keys(phys.rrus).forEach(function (k) { node("R:" + k, { t: "R", u: phys.rrus[k] }); });
     Object.keys(phys.sectors).forEach(function (id) { node("S:" + id, { t: "S", s: phys.sectors[id] }); });
     Object.keys(phys.secEqs).forEach(function (id) { node("E:" + id, { t: "E", e: phys.secEqs[id] }); });
@@ -3500,7 +3508,7 @@ window.CA_TOOL={
   function renderPhys() {
     var stage = $("physStage");
     pModel = null; physSel = null;
-    if (!phys || (!Object.keys(phys.rrus).length && !Object.keys(phys.chains).length)) {
+    if (!phys || (!Object.keys(phys.rrus).length && !Object.keys(phys.chains).length && !Object.keys(boards).some(function (bk) { return isBbpBoard(boards[bk]); }))) {
       stage.innerHTML = '<p class="empty-note" style="padding:16px">Inclua LST RRUCHAIN, LST RRU, DSP SECTOR e LST SECTOREQM na rodada 1 para montar o diagrama.</p>';
       $("modBox").style.display = "none"; $("ptWrap").innerHTML = ""; $("physSelInfo").textContent = "";
       view = { s: 1, x: 0, y: 0 }; applyView(); return;
@@ -3514,8 +3522,12 @@ window.CA_TOOL={
       var b = M.nodes[id], bd = boards[key(b.cab, b.srn, b.slot)] || {};
       h.push('<div class="pcard" data-node="' + E(id) + '" style="border-left:5px solid ' + physColorForBoardKey(b.k) + '"><div class="pc-t">' + E(bd.mfrType || bd.configType || "Placa") + '</div><div class="pc-s">CN' + E(b.cab) + "/SRN" + E(b.srn) + "/SLOT" + E(b.slot) +
         (bd.description ? '<br><span class="muted">' + E(bd.description) + "</span>" : "") + "</div>");
-      Object.keys(b.ports).sort(function (x, y) { return +x - +y; }).forEach(function (p) {
+      // BBP: sempre mostra as 6 portas (0 a 5), mesmo sem RRU chain usando
+      var pl = Object.keys(b.ports);
+      if (isBbpBoard(bd) || !(bd.mfrType || bd.configType)) for (var pi = 0; pi < 6; pi++) if (pl.indexOf(String(pi)) < 0) pl.push(String(pi));
+      pl.sort(function (x, y) { return +x - +y; }).forEach(function (p) {
         var c = b.ports[p];
+        if (!c) { h.push('<div class="pport r free" data-n="bp:' + E(b.k + "_" + p) + '">Porta ' + E(p) + ' <span class="pt">livre</span></div>'); return; }
         h.push('<div class="pport r" data-n="bp:' + E(b.k + "_" + p) + '">Porta ' + E(p) + ' <span class="pt">' + (c.proto === "eCPRI" ? "eCPRI" : "CPRI") + " · ch " + E(c.no) + "</span></div>");
       });
       h.push("</div>");
@@ -4654,7 +4666,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
 
   // ---------- histórico ----------
   var HKEY = "baselineHuawei.historico.v1";
-  var cur = { id: null, ne: "", r1: "", r2: "" }, loading = false, saveT = null;
+  var cur = { id: null, ne: "", r1: "", r2: "", r2At: null }, loading = false, saveT = null;
   function hLoad() { try { return JSON.parse(localStorage.getItem(HKEY) || "[]"); } catch (e) { return []; } }
   function hWrite(list) {
     try { localStorage.setItem(HKEY, JSON.stringify(list)); return true; }
@@ -4668,7 +4680,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   function fmt(ts) { var d = new Date(ts); return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); }
   function snapshot() {
     return {
-      ne: cur.ne, r1: cur.r1, r2: cur.r2,
+      ne: cur.ne, r1: cur.r1, r2: cur.r2, r2At: cur.r2At || null,
       ca: window.CA_TOOL.getEdits(), rru: window.PL_TOOL.getRru(), pw: window.PW_TOOL ? window.PW_TOOL.getEdits() : null,
       bl: { in4G: $("input4G").value, in5G: $("input5G").value, nb: $("blNb").checked },
       cells: window.PL_TOOL.cellCount(), boards: parseInt($("statTotal").textContent, 10) || 0
@@ -4691,11 +4703,11 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     var q = $("histFilter").value.trim().toLowerCase();
     var vis = list.filter(function (e) { return !q || String(e.ne).toLowerCase().indexOf(q) !== -1; });
     $("histCount").textContent = list.length ? vis.length + " de " + list.length + " coleta(s)" : "";
-    var h = "<thead><tr><th>Site</th><th>Coletado em</th><th>Atualizado em</th><th>Células</th><th>Placas</th><th>Conteúdo</th><th></th></tr></thead><tbody>";
-    if (!vis.length) h += '<tr><td colspan="7" class="muted">' + (list.length ? "Nenhum site corresponde ao filtro." : "Nenhum site no histórico ainda. Processe uma entrada para salvar.") + "</td></tr>";
+    var h = "<thead><tr><th>Site</th><th>Coletado em</th><th>Rodada 2 em</th><th>Atualizado em</th><th>Células</th><th>Placas</th><th>Conteúdo</th><th></th></tr></thead><tbody>";
+    if (!vis.length) h += '<tr><td colspan="8" class="muted">' + (list.length ? "Nenhum site corresponde ao filtro." : "Nenhum site no histórico ainda. Processe uma entrada para salvar.") + "</td></tr>";
     vis.forEach(function (e) {
       var ed = e.ca && Object.keys(e.ca).some(function (k) { return e.ca[k] && Object.keys(e.ca[k]).length; });
-      h += '<tr class="' + (e.id === cur.id ? "cur" : "") + '"><td class="ne">' + esc(e.ne) + "</td><td>" + fmt(e.created) + "</td><td>" + fmt(e.updated) + "</td><td>" + (e.cells || 0) + "</td><td>" + (e.boards || 0) +
+      h += '<tr class="' + (e.id === cur.id ? "cur" : "") + '"><td class="ne">' + esc(e.ne) + "</td><td>" + fmt(e.created) + "</td><td>" + (e.r2At ? fmt(e.r2At) : (e.r2 ? '<span class="muted">sem registro</span>' : "—")) + "</td><td>" + fmt(e.updated) + "</td><td>" + (e.cells || 0) + "</td><td>" + (e.boards || 0) +
         '</td><td><span class="pill ok">Rodada 1</span>' + (e.r2 ? '<span class="pill ok">Rodada 2</span>' : '<span class="pill">sem rodada 2</span>') +
         (ed ? '<span class="pill ok">edições CA</span>' : "") + (e.rru && Object.keys(e.rru).length ? '<span class="pill ok">RRU Name</span>' : "") + (e.pw && e.pw.c && Object.keys(e.pw.c).length ? '<span class="pill ok">edições Potência</span>' : "") +
         '</td><td class="act"><button class="primary sm" type="button" data-hopen="' + esc(e.id) + '">' + (e.id === cur.id ? "Recarregar" : "Abrir") + '</button><button class="danger sm" type="button" data-hdel="' + esc(e.id) + '">Excluir</button></td></tr>';
@@ -4710,7 +4722,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     try {
       $("uniIn").value = e.r1;
       process(e.r1, e.id);
-      if (e.r2) { cur.r2 = e.r2; $("in2").value = e.r2; $("btn2").click(); }
+      if (e.r2) { cur.r2 = e.r2; cur.r2At = e.r2At || null; $("in2").value = e.r2; $("btn2").click(); }
       if (e.ca) window.CA_TOOL.setEdits(e.ca);
       window.PL_TOOL.setRru(e.rru || {});
       if (window.PW_TOOL) window.PW_TOOL.setEdits(e.pw || null);
@@ -4765,13 +4777,13 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     var caOk = window.CA_TOOL.run(t);
     window.PL_TOOL.run1(t);
     if (window.PW_TOOL) window.PW_TOOL.setText(t);
-    cur.r1 = t; cur.r2 = ""; cur.ne = neFrom(t);
+    cur.r1 = t; cur.r2 = ""; cur.r2At = null; cur.ne = neFrom(t);
     $("neLbl").textContent = cur.ne;
     if (fromId) cur.id = fromId;
     else {
       var same = hLoad().filter(function (e) { return e.ne === cur.ne && e.r1 === t; })[0];
       cur.id = same ? same.id : null;
-      if (same && same.r2) { /* mesma coleta: mantém rodada 2 salva */ cur.r2 = same.r2; $("in2").value = same.r2; $("btn2").click(); }
+      if (same && same.r2) { /* mesma coleta: mantém rodada 2 salva */ cur.r2 = same.r2; cur.r2At = same.r2At || null; $("in2").value = same.r2; $("btn2").click(); }
     }
     return caOk;
   }
@@ -4794,7 +4806,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     window.CA_TOOL.clear();
     window.PL_TOOL.reset();
     if (window.PW_TOOL) window.PW_TOOL.reset();
-    cur = { id: null, ne: "", r1: "", r2: "" };
+    cur = { id: null, ne: "", r1: "", r2: "", r2At: null };
     $("input4G").value = ""; $("input5G").value = ""; $("count4G").textContent = "0"; $("count5G").textContent = "0"; $("blFillMsg").textContent = "";
     badges(); renderHist(); histMsg("");
     show("in");
@@ -4828,7 +4840,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   // rodada 2: salva no histórico e atualiza indicadores
   $("btn2").addEventListener("click", function () {
     setTimeout(function () {
-      if (!loading && cur.r1 && $("in2").value !== cur.r2) { cur.r2 = $("in2").value; saveNow(); }
+      if (!loading && cur.r1 && $("in2").value !== cur.r2) { cur.r2 = $("in2").value; cur.r2At = Date.now(); saveNow(); histMsg("Rodada 2 de " + cur.ne + " registrada em " + fmt(cur.r2At) + ".", "ok"); }
       if (window.PW_TOOL) window.PW_TOOL.render();
       badges();
     }, 0);
