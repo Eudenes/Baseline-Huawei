@@ -756,6 +756,19 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
 <section id="irSec43">
   <h2><span class="n">6</span> Vizinhança 4G → 3G — UTRANNFREQ <span class="mute" style="font-weight:400">(executar na <b>BTS</b> · células LTE × UARFCN 3G · NB-IoT/NR fora)</span></h2>
   <div id="ir43Info" class="mute" aria-live="polite" style="margin-bottom:6px"></div>
+  <div class="toolbar" id="ir43Add">
+    <div class="grp">
+      <span class="mute" style="font-size:12.5px">Adicionar UARFCN 3G (vizinho externo):</span>
+      <button type="button" class="sec" data-u43="10738">+ 10738</button>
+      <button type="button" class="sec" data-u43="10762">+ 10762</button>
+      <button type="button" class="sec" data-u43="4358">+ 4358</button>
+    </div>
+    <div class="grp">
+      <label class="f">Outro UARFCN (DL)<input type="number" id="ir43NewU" min="0" max="16383" style="width:100px" placeholder="ex: 10713"></label>
+      <button type="button" id="ir43NewBtn">+ Coluna</button>
+      <span id="ir43NewInfo" class="mute" style="min-width:110px"></span>
+    </div>
+  </div>
   <div class="legend" style="margin-bottom:8px">
     <span class="lg"><i style="background:var(--keep);border-color:var(--keepb)"></i>Existente</span>
     <span class="lg"><i style="background:var(--del);border-color:var(--delb)"></i>RMV</span>
@@ -763,7 +776,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
     <span class="lg"><i style="background:var(--man);border-color:var(--manb)"></i>ADD manual</span>
     <span class="lg"><i style="background:var(--miss);border-color:var(--missb)"></i>Do site, não adicionada</span>
     <span class="lg"><i class="ir-modlg"></i>MOD</span>
-    <span class="mute">· Valor = CELLRESELPRIORITY · <b>Clique</b>: alterna · <b>Duplo clique</b>/F2: editar CELLRESELPRIORITY, QQUALMIN, QRXLEVMIN, THRESHXLOW</span>
+    <span class="mute">· Valor = CELLRESELPRIORITY · <b>Clique</b>: alterna · <b>Duplo clique</b>/F2: editar CELLRESELPRIORITY, QQUALMIN, QRXLEVMIN, THRESHXLOW · Coluna adicionada (MAN): já entra como ADD em todas as células LTE — clique para tirar; no cabeçalho, <b>todas</b>/<b>nenhuma</b> e <b>✕</b> remove a coluna</span>
   </div>
   <div class="cawrap"><table class="ca" id="ir43Mx"></table></div>
   <div class="row" style="margin:8px 0 6px">
@@ -5184,7 +5197,7 @@ window.TB_ED={open:function(o){close();var bg=document.createElement('div');bg.c
 var $=function(id){return document.getElementById(id);};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});};
 var LS='TB_IRAT_RNC_',LSE='TB_IRAT_ED_',MAX34=8;
-var E={a43:{},m43:{},a34:{}};
+var E={a43:{},m43:{},a34:{},c43:{}};
 function norm(t){return String(t||'').replace(/<br\s*\/?>/gi,'\n').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/\r/g,'');}
 function siteName(){return (window.CA_TOOL&&window.CA_TOOL.ne&&window.CA_TOOL.ne())||'';}
 function cells(){var d=window.PL_TOOL&&window.PL_TOOL.exportData?window.PL_TOOL.exportData():{cells:[]};return d.cells||[];}
@@ -5197,7 +5210,7 @@ function sections(t,fn){var sec='',arg='';norm(t).split('\n').forEach(function(l
 function cont(s){return String(s||'').replace(/::ON/gi,'-1').replace(/::OFF/gi,'-0');}
 function snd(v){return /^send$/i.test(v)?'TRUE':'FALSE';}
 function saveE(){try{var s=siteName();if(s)localStorage.setItem(LSE+s,JSON.stringify(E));}catch(e){}}
-function loadE(){E={a43:{},m43:{},a34:{}};try{var s=siteName(),v=s&&localStorage.getItem(LSE+s);if(v){var o=JSON.parse(v);E.a43=o.a43||{};E.m43=o.m43||{};E.a34=o.a34||{};}}catch(e){}}
+function loadE(){E={a43:{},m43:{},a34:{},c43:{}};try{var s=siteName(),v=s&&localStorage.getItem(LSE+s);if(v){var o=JSON.parse(v);E.a43=o.a43||{};E.m43=o.m43||{};E.a34=o.a34||{};E.c43=o.c43||{};}}catch(e){}}
 function delayClick(tbl,fn,dbl){tbl.addEventListener('click',function(e){var td=e.target.closest('td.x');if(!td||td.classList.contains('serv'))return;var sh=e.shiftKey;clearTimeout(tbl._t);tbl._t=setTimeout(function(){fn(td,sh);},260);});
   tbl.addEventListener('keydown',function(e){var td=e.target.closest('td.x');if(!td)return;if(e.key==='Enter'||e.key===' '){e.preventDefault();fn(td,e.shiftKey);}else if(e.key==='F2'&&dbl){e.preventDefault();dbl(td);}});
   if(dbl)tbl.addEventListener('dblclick',function(e){var td=e.target.closest('td.x');if(!td)return;clearTimeout(tbl._t);e.preventDefault();dbl(td);});}
@@ -5213,10 +5226,12 @@ function model43(){
   var site=uniq(cl.filter(function(c){return c.tech==='UMTS';}).map(function(c){return c.dlArfcn;}));
   var raw=$('uniIn')?$('uniIn').value:'',ex=parseUtran(raw),exK={};ex.forEach(function(r){exK[r.lc+'|'+r.u]=r;});
   var lteIds={};lte.forEach(function(c){lteIds[c.localCellId]=1;});
-  var cols=uniq(site.concat(ex.filter(function(r){return lteIds[r.lc];}).map(function(r){return r.u;}))).sort(num);
-  M43={lte:lte,site:site,ex:ex,exK:exK,cols:cols,has:/LST\s+UTRANNFREQ/i.test(raw)};
+  var man=Object.keys(E.c43||{}).filter(function(u){return site.indexOf(u)<0;});
+  var cols=uniq(site.concat(ex.filter(function(r){return lteIds[r.lc];}).map(function(r){return r.u;})).concat(man)).sort(num);
+  M43={lte:lte,site:site,ex:ex,exK:exK,cols:cols,man:man,has:/LST\s+UTRANNFREQ/i.test(raw)};
 }
-function st43(lc,u){var k=lc+'|'+u,a=E.a43[k];if(M43.exK[k])return a==='del'?'del':'keep';if(M43.site.indexOf(u)>=0)return a==='noadd'?'miss':'add';return a==='add'?'man':'none';}
+function isMan43(u){return (M43.man||[]).indexOf(String(u))>=0;}
+function st43(lc,u){var k=lc+'|'+u,a=E.a43[k];if(M43.exK[k])return a==='del'?'del':'keep';if(M43.site.indexOf(u)>=0)return a==='noadd'?'miss':'add';if(isMan43(u))return a==='noadd'?'none':'man';return a==='add'?'man':'none';}
 function base43(lc,u){var ex=M43.ex,same=ex.filter(function(r){return r.u===u;}),mine=ex.filter(function(r){return r.lc===String(lc);});
   var kf=function(r){return PK43.map(function(k){return r[k];}).join();};
   return (same.length&&mode(same,kf))||(mine.length&&mode(mine,kf))||(ex.length&&mode(ex,kf))||EX43;}
@@ -5224,11 +5239,12 @@ function prm43(lc,u){var k=lc+'|'+u,e=M43.exK[k],b=e||base43(lc,u),m=E.m43[k]||{
 function mod43(lc,u){var k=lc+'|'+u,e=M43.exK[k];if(!e||!E.m43[k])return null;var p=prm43(lc,u);return (p.prio!==e.prio||p.qqual!==e.qqual||p.qrx!==e.qrx||p.thLow!==e.thLow||p.reselCfg!==e.reselCfg)?p:null;}
 function render43(){
   model43();var L=M43.lte,C=M43.cols,info=[];
-  if(!L.length)info.push('Sem células LTE carregadas.');if(!M43.site.length)info.push('Sem UARFCN 3G no site (DSP ULOCELL na rodada 1).');
+  if(!L.length)info.push('Sem células LTE carregadas.');if(!M43.site.length)info.push('Sem UARFCN 3G no site (sem 3G integrado / DSP ULOCELL)'+(M43.man.length?'.':' — adicione os UARFCN vizinhos abaixo.'));
   if(!M43.has)info.push('⚠ LST UTRANNFREQ:; não encontrado na rodada 1 — tudo tratado como ausente.');
   $('ir43Info').textContent=info.join(' ')+(M43.ex.length?' Existentes lidos: '+M43.ex.length+'.':'');
   if(!L.length||!C.length){$('ir43Mx').innerHTML='';$('ir43Out').value='// Nada a gerar.';$('ir43Stat').textContent='';return;}
-  var h='<thead><tr><th class="rh">Célula LTE</th><th>DL EARFCN</th>'+C.map(function(u){var s=M43.site.indexOf(u)>=0;return '<th><div class="mono" style="font-size:13px;font-weight:700">'+u+'</div>'+(s?'<span class="tag t-site">SITE</span>':'<span class="tag t-ext">EXT</span>')+'</th>';}).join('')+'</tr></thead><tbody>';
+  var h='<thead><tr><th class="rh">Célula LTE</th><th>DL EARFCN</th>'+C.map(function(u){var s=M43.site.indexOf(u)>=0,mn=!s&&isMan43(u);return '<th><div class="mono" style="font-size:13px;font-weight:700">'+u+'</div>'+(s?'<span class="tag t-site">SITE</span>':(mn?'<span class="tag t-ext">MAN</span>':'<span class="tag t-ext">EXT</span>'))+
+    (mn?'<div style="margin-top:3px;white-space:nowrap"><button type="button" class="sec" style="padding:1px 5px;font-size:11px" data-all43="'+u+'" title="ADD em todas as células LTE">todas</button> <button type="button" class="sec" style="padding:1px 5px;font-size:11px" data-none43="'+u+'" title="Nenhum ADD nesta coluna">nenhuma</button> <button type="button" class="sec" style="padding:1px 5px;font-size:11px" data-rm43="'+u+'" title="Remover coluna">✕</button></div>':'')+'</th>';}).join('')+'</tr></thead><tbody>';
   var R=[],M=[],A=[];
   L.forEach(function(c){var lc=String(c.localCellId);h+='<tr><th class="rh">'+esc(lc)+' · '+esc(c.cellName)+'</th><td class="mono">'+esc(c.dlArfcn)+'</td>';
     C.forEach(function(u){var s=st43(lc,u),p=prm43(lc,u),e=M43.exK[lc+'|'+u],mm=s==='keep'&&mod43(lc,u),t,cls='x '+s+(mm?' modc':'');
@@ -5248,10 +5264,11 @@ function render43(){
   $('ir43Out').value=o.join('\n');$('ir43Stat').textContent=R.length+' RMV · '+M.length+' MOD · '+A.length+' ADD';
 }
 function tog43(td){var lc=td.getAttribute('data-a'),u=td.getAttribute('data-b'),k=lc+'|'+u,s=st43(lc,u);
-  if(s==='keep')E.a43[k]='del';else if(s==='del')delete E.a43[k];else if(s==='add')E.a43[k]='noadd';else if(s==='miss')delete E.a43[k];else if(s==='man')delete E.a43[k];else E.a43[k]='add';
+  var mc=isMan43(u);
+  if(s==='keep')E.a43[k]='del';else if(s==='del')delete E.a43[k];else if(s==='add')E.a43[k]='noadd';else if(s==='miss')delete E.a43[k];else if(s==='man'){if(mc)E.a43[k]='noadd';else delete E.a43[k];}else{if(mc)delete E.a43[k];else E.a43[k]='add';}
   saveE();render43();focusCell($('ir43Mx'),lc,u);}
 function edit43(td){var lc=td.getAttribute('data-a'),u=td.getAttribute('data-b'),k=lc+'|'+u,s=st43(lc,u);
-  if(s==='none'){E.a43[k]='add';}else if(s==='miss'){delete E.a43[k];}else if(s==='del'){delete E.a43[k];}
+  if(s==='none'){if(isMan43(u))delete E.a43[k];else E.a43[k]='add';}else if(s==='miss'){delete E.a43[k];}else if(s==='del'){delete E.a43[k];}
   saveE();render43();var p=prm43(lc,u),e=M43.exK[k];
   window.TB_ED.open({title:'UTRANNFREQ · LTE '+lc+' → UARFCN '+u+(e?' (existente → MOD)':' (ADD)'),
     note:e?('Atual: Prio '+e.prio+' · QQUALMIN '+e.qqual+' · QRXLEVMIN '+e.qrx+' · THRESHXLOW '+e.thLow):'Valores usados no ADD.',
@@ -5369,7 +5386,22 @@ function loadSaved(){var s=siteName();loadE();if(!s)return;try{$('irIn').value=l
 function refresh(){try{render43();buildQuery();buildRnc();}catch(e){console.error(e);}}
 delayClick($('ir43Mx'),tog43,edit43);
 delayClick($('ir34Mx'),tog34,null);
-$('ir43Rst').addEventListener('click',function(){E.a43={};E.m43={};saveE();render43();});
+$('ir43Rst').addEventListener('click',function(){E.a43={};E.m43={};E.c43={};saveE();render43();});
+// colunas UARFCN manuais (site sem 3G integrado)
+function addCol43(v){var info=$('ir43NewInfo'),u=parseInt(v,10);
+  if(isNaN(u)||u<0||u>16383){info.innerHTML='<span style="color:#b42318">UARFCN inválido (0 a 16383)</span>';return;}
+  u=String(u);model43();
+  if(M43.cols.indexOf(u)>=0){info.innerHTML='<span style="color:#b42318">UARFCN '+u+' já está na matriz</span>';return;}
+  E.c43[u]=1;Object.keys(E.a43).forEach(function(k){if(k.split('|')[1]===u&&E.a43[k]==='noadd')delete E.a43[k];});
+  saveE();render43();info.textContent='UARFCN '+u+' adicionado ✓';$('ir43NewU').value='';}
+$('ir43Add').addEventListener('click',function(e){var b=e.target.closest('[data-u43]');if(b)addCol43(b.getAttribute('data-u43'));});
+$('ir43NewBtn').addEventListener('click',function(){addCol43($('ir43NewU').value);});
+$('ir43NewU').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addCol43($('ir43NewU').value);}});
+$('ir43Mx').addEventListener('click',function(e){var b=e.target.closest('[data-rm43],[data-all43],[data-none43]');if(!b)return;e.stopPropagation();
+  var u=b.getAttribute('data-rm43')||b.getAttribute('data-all43')||b.getAttribute('data-none43');
+  if(b.hasAttribute('data-rm43')){delete E.c43[u];Object.keys(E.a43).forEach(function(k){if(k.split('|')[1]===u&&!M43.exK[k])delete E.a43[k];});$('ir43NewInfo').textContent='';}
+  else M43.lte.forEach(function(c){var k=c.localCellId+'|'+u;if(M43.exK[k])return;if(b.hasAttribute('data-all43'))delete E.a43[k];else E.a43[k]='noadd';});
+  saveE();render43();},true);
 $('ir34Rst').addEventListener('click',function(){E.a34={};saveE();buildRnc();});
 $('irGo').addEventListener('click',function(){try{var s=siteName();if(s)localStorage.setItem(LS+s,$('irIn').value);}catch(e){}buildRnc();$('irPStat').textContent='Processado ✓';});
 $('irClr').addEventListener('click',function(){$('irIn').value='';try{localStorage.removeItem(LS+siteName());}catch(e){}buildRnc();$('irPStat').textContent='';});
