@@ -319,6 +319,16 @@ button.ghost:hover{ border-color: var(--accent); color: var(--accent); }
 .scB .chips{ display: flex; gap: 4px; flex-wrap: wrap; }
 .scB .chip{ font-family: Consolas, "Courier New", monospace; font-size: 11px; border: 1px solid #2E6FD0; color: #2E6FD0; border-radius: 4px; padding: 0 5px; }
 .scB svg.psvg{ position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none; overflow: visible; }
+.scB svg.psvg path.lkhit{ fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+.scB svg.psvg path.lkhit:hover + path.lk, .scB svg.psvg path.lk.fo.hov{ stroke-width: 3.6; }
+.scB .prow{ display: flex; gap: 6px; align-items: center; }
+.scB .prow .pport{ width: auto; }
+.scB .prow .pport.l{ flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.scB .prow .pport.r{ flex: 0 0 auto; }
+.scB .pport.out{ background: #2F7D52; }
+.scB .pport.casc{ background: #E07B2B; }
+.scB .pcard.cascaded{ margin-left: 26px; }
+.scB path.lk.casc{ stroke-dasharray: none; }
 .scB path.lk{ fill: none; stroke-width: 1.6; transition: opacity .15s; }
 .scB path.lk.fo{ stroke: #E07B2B; stroke-width: 2.2; }
 .scB path.lk.rf{ stroke: #5B8FE0; stroke-dasharray: 4 3; }
@@ -858,7 +868,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
 <div class="pane scB" id="pane-ph" role="tabpanel" aria-labelledby="tab-ph" hidden>
   <section class="phys" id="physSec">
     <h2>Conexão física — Placa → RRU/AAU → Sector → Sector Equipment → Célula</h2>
-    <p class="instr">Laranja = fibra (LST RRUCHAIN). Azul tracejado = porta de antena RRU → SECTOR (DSP SECTOR). Verde = SECTOR → Sector Equipment. Cinza = Sector Equipment → célula (LTE/NB-IoT via LST EUCELLSECTOREQM/EUPRBSECTOREQM, UMTS via LST ULOCELLSECTOREQM, NR via NRDUCELLCOVERAGE). Chips no Sector Equipment = portas efetivamente usadas (LST SECTOREQM). <strong>Clique</strong> num item para destacar a cascata; <strong>arraste</strong> para mover; <strong>roda</strong> rola para baixo/cima, <strong>Shift+roda</strong> para os lados, <strong>Ctrl+roda</strong> zoom. Edite o <strong>RRU Name</strong> para gerar o MOD RRU.</p>
+    <p class="instr">Laranja = fibra (LST RRUCHAIN); RRU com RRU Position &gt; 0 aparece recuada logo abaixo e ligada na saída de cascata da RRU anterior da mesma chain — <strong>clique numa linha laranja</strong> para destacar a RRU Chain inteira. Portas de antena livres aparecem tracejadas (nº de portas pelo 4T4R/2T2R do DSP BRDMFRINFO). Azul tracejado = porta de antena RRU → SECTOR (DSP SECTOR). Verde = porta do SECTOR → porta do Sector Equipment (LST SECTOREQM). Cinza = Sector Equipment → célula (LTE/NB-IoT via LST EUCELLSECTOREQM/EUPRBSECTOREQM, UMTS via LST ULOCELLSECTOREQM, NR via NRDUCELLCOVERAGE). Chips no Sector Equipment = portas efetivamente usadas (LST SECTOREQM). <strong>Clique</strong> num item para destacar a cascata; <strong>arraste</strong> para mover; <strong>roda</strong> rola para baixo/cima, <strong>Shift+roda</strong> para os lados, <strong>Ctrl+roda</strong> zoom. Edite o <strong>RRU Name</strong> para gerar o MOD RRU.</p>
     <div class="navbar">
       <button class="ghost" type="button" id="zoomOut" title="Diminuir">−</button><span id="zoomPct">100%</span><button class="ghost" type="button" id="zoomIn" title="Aumentar">+</button>
       <button class="ghost" type="button" id="zoom100">100%</button><button class="ghost" type="button" id="zoomWidth">Ajustar largura</button>
@@ -2713,7 +2723,7 @@ window.CA_TOOL={
   var RESULT_COLS = ["Baseband Equipment", "Posição", "Modelo", "Padrão ativo", "Local Cell ID", "Cell Name", "Frequency band", "Downlink EARFCN", "Uplink bandwidth", "Sector Eq.", "RRU / AAU", "Description"];
   function rrusForCell(c) {
     if (!pModel || !pModel.nodes["C:" + c.k]) return [];
-    var b = reach("C:" + c.k, pModel.bwd);
+    var b = reach("C:" + c.k, pModel.bwd, true);
     return pModel.order.R.filter(function (id) { return b[id]; }).map(function (id) { return pModel.nodes[id].u; });
   }
   function rruLabel(u) { var n = rruEdits[u.k] !== undefined ? rruEdits[u.k] : u.name; return (n || ("CN" + u.cab + "/SRN" + u.srn + "/SLOT" + u.slot)); }
@@ -3359,8 +3369,12 @@ window.CA_TOOL={
       var e = phys.secEqs[id], s = phys.sectors[e.sector];
       if (!e.ants.length && s) { e.ants = s.ants.slice(); e.fromSector = true; }
       e.ants.forEach(function (a) { addPort(a.k, a.ch); });
-      if (s) e.diff = s.ants.filter(function (a) { return !e.ants.some(function (x) { return x.k === a.k && x.ch === a.ch; }); })
-        .concat(e.ants.filter(function (a) { return !s.ants.some(function (x) { return x.k === a.k && x.ch === a.ch; }); }));
+      if (s) e.diff = e.ants.filter(function (a) { return !s.ants.some(function (x) { return x.k === a.k && x.ch === a.ch; }); });
+    });
+    // portas do SECTOR que nenhum Sector Equipment usa
+    Object.keys(phys.sectors).forEach(function (id) {
+      var s = phys.sectors[id], es = Object.keys(phys.secEqs).map(function (x) { return phys.secEqs[x]; }).filter(function (e) { return String(e.sector) === String(id); });
+      s.unused = es.length ? s.ants.filter(function (a) { return !es.some(function (e) { return e.ants.some(function (x) { return x.k === a.k && x.ch === a.ch; }); }); }) : [];
     });
     Object.keys(phys.rrus).forEach(function (k) { phys.rrus[k].ports.sort(); });
     // NR: as células entram no mesmo mapa "cells" (tech NR) -> aparecem no consolidado ligadas à placa via Baseband do TRP
@@ -3414,6 +3428,19 @@ window.CA_TOOL={
   }
   function validName(n) { return n !== "" && !/["';]/.test(n) && n.length <= 64; }
   function rruModel(u) { var b = boards[key(u.cab, u.srn, u.slot)]; return b && b.mfrType ? b.mfrType : ""; }
+  // nº de portas de antena: "4T4R" / "2T2R" / "1T2R" do DSP BRDMFRINFO (rodada 2); sem ele, LST RRU (RX/TX)
+  function rruTR(u) {
+    var b = boards[key(u.cab, u.srn, u.slot)], m = b && b.description ? String(b.description).match(/(\d+)T(\d+)R/i) : null;
+    return m ? { t: +m[1], r: +m[2], src: "mfr" } : { t: +u.tx || 0, r: +u.rx || 0, src: "rru" };
+  }
+  function rruAllPorts(u) {
+    var used = u.ports.slice();
+    if (used.some(function (p) { return !/^R\d[A-H]$/.test(p); })) return used; // AAU/BEAM: só o que existe
+    if (!used.length && /AIRU|AAU/i.test(u.type || "")) return used;
+    var tr = rruTR(u), n = Math.min(8, Math.max(tr.t, tr.r)), out = used.slice();
+    for (var i = 0; i < n; i++) { var nm = "R0" + "ABCDEFGH".charAt(i); if (out.indexOf(nm) < 0) out.push(nm); }
+    return out.sort();
+  }
   function physCells() {
     return sortedCells().filter(function (c) { return c.sectorEqms.length > 0; });
   }
@@ -3441,18 +3468,40 @@ window.CA_TOOL={
     Object.keys(phys.sectors).forEach(function (id) { node("S:" + id, { t: "S", s: phys.sectors[id] }); });
     Object.keys(phys.secEqs).forEach(function (id) { node("E:" + id, { t: "E", e: phys.secEqs[id] }); });
     physCells().forEach(function (c) { node("C:" + c.k, { t: "C", c: c }); });
-    Object.keys(phys.rrus).forEach(function (k) {
-      var c = phys.chains[phys.rrus[k].chain]; if (!c) return;
-      var bk = rkey(c.cab, c.srn, c.slot);
-      edge("B:" + bk, "R:" + k, "bp:" + bk + "_" + c.port, "ri:" + k, "fo");
+    // RRU chain: só a RRU de menor RRU Position liga na porta da placa; as demais (cascata) ligam na RRU anterior da mesma cadeia
+    var chainNos = {};
+    Object.keys(phys.rrus).forEach(function (k) { chainNos[phys.rrus[k].chain] = 1; });
+    Object.keys(chainNos).forEach(function (no) {
+      var list = chainRrus(no), c = phys.chains[no];
+      list.forEach(function (u, i) {
+        var n = M.nodes["R:" + u.k];
+        n.prev = i > 0 ? list[i - 1].k : null; n.next = i < list.length - 1 ? list[i + 1].k : null; n.idx = i;
+        if (i === 0) {
+          if (!c) return;
+          var bk = rkey(c.cab, c.srn, c.slot);
+          edge("B:" + bk, "R:" + u.k, "bp:" + bk + "_" + c.port, "ri:" + u.k, "fo");
+          M.edges[M.edges.length - 1].chain = no;
+        } else {
+          edge("R:" + list[i - 1].k, "R:" + u.k, "ro:" + list[i - 1].k, "ri:" + u.k, "fo casc");
+          M.edges[M.edges.length - 1].chain = no;
+        }
+      });
     });
     Object.keys(phys.sectors).forEach(function (id) {
       phys.sectors[id].ants.forEach(function (a) { edge("R:" + a.k, "S:" + id, "ra:" + a.k + "|" + a.ch, "sa:" + id + "|" + a.k + "|" + a.ch, "rf"); });
     });
+    // SECTOR -> Sector Equipment porta a porta (a mesma porta do SECTOR pode ir para SECEQs diferentes)
     Object.keys(phys.secEqs).forEach(function (id) {
-      var e = phys.secEqs[id];
-      if (M.nodes["S:" + e.sector]) edge("S:" + e.sector, "E:" + id, "so:" + e.sector, "ei:" + id, "se");
-      else e.ants.forEach(function (a) { edge("R:" + a.k, "E:" + id, "ra:" + a.k + "|" + a.ch, "ei:" + id, "rf"); });
+      var e = phys.secEqs[id], s = phys.sectors[e.sector];
+      if (!e.ants.length) {
+        if (s) edge("S:" + e.sector, "E:" + id, s.ants.length ? "so:" + e.sector + "|" + s.ants[0].k + "|" + s.ants[0].ch : "", "ei:" + id + "|*", "se");
+        return;
+      }
+      e.ants.forEach(function (a) {
+        var pk = a.k + "|" + a.ch;
+        if (s && s.ants.some(function (x) { return x.k === a.k && x.ch === a.ch; })) edge("S:" + e.sector, "E:" + id, "so:" + e.sector + "|" + pk, "ei:" + id + "|" + pk, "se");
+        else edge("R:" + a.k, "E:" + id, "ra:" + pk, "ei:" + id + "|" + pk, "rf");
+      });
     });
     physCells().forEach(function (c) { c.sectorEqms.forEach(function (s) { edge("E:" + s, "C:" + c.k, "eo:" + s, "ci:" + c.k, "ce"); }); });
     function ids(t) { return Object.keys(M.nodes).filter(function (i) { return M.nodes[i].t === t; }); }
@@ -3474,20 +3523,32 @@ window.CA_TOOL={
     M.order = { B: bO, R: rO, S: sO, E: eO, C: cO };
     return M;
   }
-  function reach(start, adj) {
+  // noRR: não atravessa RRU -> RRU (cascata), para não misturar as células da RRU de cima com as da cascata
+  function reach(start, adj, noRR) {
     var seen = {}, st = [start];
-    while (st.length) { var x = st.pop(); (adj[x] || []).forEach(function (y) { if (!seen[y]) { seen[y] = 1; st.push(y); } }); }
+    function isR(id) { var n = pModel && pModel.nodes[id]; return n && n.t === "R"; }
+    while (st.length) { var x = st.pop(); (adj[x] || []).forEach(function (y) { if (noRR && isR(x) && isR(y)) return; if (!seen[y]) { seen[y] = 1; st.push(y); } }); }
     return seen;
   }
   function cascade(id) {
-    var s = {}; s[id] = 1;
-    var f = reach(id, pModel.fwd), b = reach(id, pModel.bwd), k;
+    var s = {}, k;
+    if (/^CH:/.test(id)) { // RRU chain inteira: todas as RRUs da cadeia (cabeça + cascata) e o que elas alimentam
+      chainRrus(id.slice(3)).forEach(function (u) { var c = cascade("R:" + u.k); for (k in c) s[k] = 1; });
+      return s;
+    }
+    s[id] = 1;
+    var f = reach(id, pModel.fwd, true), b = reach(id, pModel.bwd);
     for (k in f) s[k] = 1; for (k in b) s[k] = 1;
     return s;
   }
+  function chainRrus(no) {
+    return Object.keys(phys.rrus).map(function (k) { return phys.rrus[k]; })
+      .filter(function (u) { return String(u.chain) === String(no); })
+      .sort(function (a, b) { return (+a.pos - +b.pos) || (+a.srn - +b.srn); });
+  }
   function cellsForRru(k) {
     if (!pModel || !pModel.nodes["R:" + k]) return [];
-    var f = reach("R:" + k, pModel.fwd);
+    var f = reach("R:" + k, pModel.fwd, true);
     return pModel.order.C.filter(function (id) { return f[id]; }).map(function (id) { return pModel.nodes[id].c; });
   }
   // cor por placa (comum às duas tabelas)
@@ -3545,13 +3606,20 @@ window.CA_TOOL={
     h.push("</div>");
     col0("RRU / AAU", M.order.R.length);
     M.order.R.forEach(function (id) {
-      var u = M.nodes[id].u, cur = rruEdits[u.k] !== undefined ? rruEdits[u.k] : u.name, ch = phys.chains[u.chain], mdl = rruModel(u);
-      h.push('<div class="pcard" data-node="' + E(id) + '" style="border-left:5px solid ' + physColorForRru(u) + '"><div class="pport l" data-n="ri:' + E(u.k) + '">' + (ch ? "in · " + (ch.proto === "eCPRI" ? "eCPRI" : "CPRI") : "sem cadeia") + "</div>" +
+      var rn = M.nodes[id], u = rn.u, cur = rruEdits[u.k] !== undefined ? rruEdits[u.k] : u.name, ch = phys.chains[u.chain], mdl = rruModel(u), tr = rruTR(u);
+      var proto = ch ? (ch.proto === "eCPRI" ? "eCPRI" : "CPRI") : "";
+      var prevU = rn.prev ? phys.rrus[rn.prev] : null, nextU = rn.next ? phys.rrus[rn.next] : null;
+      var inTxt = prevU ? "in · cascata ← Pos " + E(prevU.pos) + " (" + E(rruEdits[prevU.k] || prevU.name) + ")" : (ch ? "in · " + proto : "sem cadeia");
+      h.push('<div class="pcard' + (prevU ? " cascaded" : "") + '" data-node="' + E(id) + '" style="border-left:5px solid ' + physColorForRru(u) + '"><div class="pport l' + (prevU ? " casc" : "") + '" data-n="ri:' + E(u.k) + '">' + inTxt + "</div>" +
         '<div class="pc-t">' + E(mdl || u.type || "RRU") + ' <span class="pt">' + E(u.type || "") + " · " + E(u.mode || "") + "</span></div>" +
-        '<div class="pc-s">CN' + E(u.cab) + "/SRN" + E(u.srn) + "/SLOT" + E(u.slot) + " · Chain " + E(u.chain) + " · Pos " + E(u.pos) + " · " + E(u.rx) + "RX/" + E(u.tx) + "TX" +
+        '<div class="pc-s">CN' + E(u.cab) + "/SRN" + E(u.srn) + "/SLOT" + E(u.slot) + " · Chain " + E(u.chain) + " · Pos " + E(u.pos) + " · " + (tr.src === "mfr" ? E(tr.t) + "T" + E(tr.r) + "R" : E(u.rx) + "RX/" + E(u.tx) + "TX") +
         (mdl ? "" : '<br><span class="tag-warn">modelo: rode a rodada 2</span>') + "</div>" +
         '<label class="pc-l">RRU Name<input class="rn' + (cur !== u.name ? " edited" : "") + '" data-k="' + E(u.k) + '" value="' + E(cur) + '"></label>');
-      u.ports.forEach(function (p) { h.push('<div class="pport r ant" data-n="ra:' + E(u.k + "|" + p) + '">' + E(p) + "</div>"); });
+      if (nextU) h.push('<div class="pport l casc" data-n="ro:' + E(u.k) + '">out · cascata → Pos ' + E(nextU.pos) + " (" + E(rruEdits[nextU.k] || nextU.name) + ")</div>");
+      rruAllPorts(u).forEach(function (p) {
+        var used = u.ports.indexOf(p) >= 0;
+        h.push('<div class="pport r ant' + (used ? "" : " free") + '" data-n="ra:' + E(u.k + "|" + p) + '">' + E(p) + (used ? "" : ' <span class="pt">livre</span>') + "</div>");
+      });
       h.push("</div>");
     });
     h.push("</div>");
@@ -3562,19 +3630,25 @@ window.CA_TOOL={
         (bf ? '<div class="pc-b">' + E(bf) + "</div>" : "") +
         '<div class="pc-s">RX ' + E(freqTxt(s.rx)) + "<br>TX " + E(freqTxt(s.tx)) + "</div>");
       s.ants.forEach(function (a) {
-        var u = phys.rrus[a.k];
-        h.push('<div class="pport l ant" data-n="sa:' + E(s.id + "|" + a.k + "|" + a.ch) + '">' + E(a.ch) + ' <span class="pt">' + E(u ? (rruEdits[a.k] || u.name) : a.k) + "</span></div>");
+        var u = phys.rrus[a.k], pk = a.k + "|" + a.ch;
+        var eqs = pModel.edges.filter(function (x) { return x.pa === "so:" + s.id + "|" + pk; }).map(function (x) { return M.nodes[x.b].e.id; });
+        h.push('<div class="prow"><div class="pport l ant" data-n="sa:' + E(s.id + "|" + pk) + '">' + E(a.ch) + ' <span class="pt">' + E(u ? (rruEdits[a.k] || u.name) : a.k) + "</span></div>" +
+          '<div class="pport r ' + (eqs.length ? "out" : "free") + '" data-n="so:' + E(s.id + "|" + pk) + '">' + (eqs.length ? "→ " + E(eqs.join(", ")) : "—") + "</div></div>");
       });
-      h.push('<div class="pport r" data-n="so:' + E(s.id) + '">Sector Eq.</div></div>');
+      if (s.unused && s.unused.length) h.push('<div class="tag-warn pc-s">⚠ Sem Sector Eq.: ' + E(s.unused.map(function (a) { return a.ch; }).join(", ")) + "</div>");
+      h.push("</div>");
     });
     h.push("</div>");
     col0("Sector Equipment", M.order.E.length);
     M.order.E.forEach(function (id) {
       var e = M.nodes[id].e;
-      h.push('<div class="pcard" data-node="' + E(id) + '"><div class="pport l" data-n="ei:' + E(e.id) + '">Sector ' + E(e.sector) + "</div>" +
-        '<div class="pc-t">SECEQ ' + E(e.id) + ' <span class="pt">' + E(e.cfg || "") + (e.beam ? " · " + E(e.beam) : "") + "</span></div>" +
-        '<div class="chips">' + e.ants.map(function (a) { var u = phys.rrus[a.k]; return '<span class="chip" title="' + E(u ? u.name : a.k) + '">' + E(a.ch) + "</span>"; }).join("") + "</div>");
-      if (e.diff && e.diff.length) h.push('<div class="tag-warn pc-s">⚠ Difere do SECTOR: ' + E(e.diff.map(function (a) { return a.ch; }).join(", ")) + "</div>");
+      h.push('<div class="pcard" data-node="' + E(id) + '"><div class="pc-t">SECEQ ' + E(e.id) + ' <span class="pt">Sector ' + E(e.sector) + " · " + E(e.cfg || "") + (e.beam ? " · " + E(e.beam) : "") + "</span></div>");
+      if (!e.ants.length) h.push('<div class="pport l" data-n="ei:' + E(e.id) + '|*">Sector ' + E(e.sector) + "</div>");
+      e.ants.forEach(function (a) {
+        var u = phys.rrus[a.k], md = /^RX$/i.test(a.mode || "") ? "RX" : (a.mode ? "RX/TX" : "");
+        h.push('<div class="pport l ant" data-n="ei:' + E(e.id + "|" + a.k + "|" + a.ch) + '" title="' + E(u ? (rruEdits[a.k] || u.name) : a.k) + '">' + E(a.ch) + ' <span class="pt">' + E(u ? (rruEdits[a.k] || u.name) : a.k) + (md ? " · " + md : "") + "</span></div>");
+      });
+      if (e.diff && e.diff.length) h.push('<div class="tag-warn pc-s">⚠ Fora do SECTOR ' + E(e.sector) + ": " + E(e.diff.map(function (a) { return a.ch; }).join(", ")) + "</div>");
       if (e.fromSector) h.push('<div class="pc-s muted">(portas do DSP SECTOR)</div>');
       h.push('<div class="pport r" data-n="eo:' + E(e.id) + '">células</div></div>');
     });
@@ -3613,14 +3687,25 @@ window.CA_TOOL={
       var a = idx[l.pa], b = idx[l.pb];
       if (!a || !b) return;
       var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-      var x1 = (ra.right - sr.left) / s, y1 = (ra.top + ra.height / 2 - sr.top) / s;
-      var x2 = (rb.left - sr.left) / s, y2 = (rb.top + rb.height / 2 - sr.top) / s;
-      var dx = Math.max(30, (x2 - x1) / 2);
-      paths.push('<path class="lk ' + l.cls + '" data-a="' + escapeHtml(l.a) + '" data-b="' + escapeHtml(l.b) + '" d="M' + x1 + "," + y1 + " C" + (x1 + dx) + "," + y1 + " " + (x2 - dx) + "," + y2 + " " + x2 + "," + y2 + '"/>');
+      var d, y1 = (ra.top + ra.height / 2 - sr.top) / s, y2 = (rb.top + rb.height / 2 - sr.top) / s;
+      if (/\bcasc\b/.test(l.cls)) { // cascata: da saída da RRU de cima para a entrada da RRU de baixo, pela esquerda
+        var xa = (ra.left - sr.left) / s, xb = (rb.left - sr.left) / s, bx = Math.min(xa, xb) - 40;
+        d = "M" + xa + "," + y1 + " C" + bx + "," + y1 + " " + bx + "," + y2 + " " + xb + "," + y2;
+      } else {
+        var x1 = (ra.right - sr.left) / s, x2 = (rb.left - sr.left) / s, dx = Math.max(30, (x2 - x1) / 2);
+        d = "M" + x1 + "," + y1 + " C" + (x1 + dx) + "," + y1 + " " + (x2 - dx) + "," + y2 + " " + x2 + "," + y2;
+      }
+      var chA = l.chain !== undefined ? ' data-chain="' + escapeHtml(l.chain) + '"' : "";
+      if (chA) paths.push('<path class="lkhit"' + chA + ' d="' + d + '"><title>RRU Chain ' + escapeHtml(l.chain) + " — clique para destacar a cadeia</title></path>");
+      paths.push('<path class="lk ' + l.cls + '"' + chA + ' data-a="' + escapeHtml(l.a) + '" data-b="' + escapeHtml(l.b) + '" d="' + d + '"/>');
     });
     svg.innerHTML = paths.join("");
   }
   function nodeLabel(id) {
+    if (/^CH:/.test(id)) {
+      var no = id.slice(3), c = phys.chains[no], us = chainRrus(no);
+      return "RRU Chain " + no + (c ? " (CN" + c.cab + "/SRN" + c.srn + "/SLOT" + c.slot + " porta " + c.port + ")" : "") + " · " + us.map(function (u) { return "Pos " + u.pos + " " + (rruEdits[u.k] || u.name); }).join(" → ");
+    }
     var n = pModel.nodes[id]; if (!n) return id;
     if (n.t === "B") { var bd = boards[key(n.cab, n.srn, n.slot)] || {}; return (bd.mfrType || "Placa") + " CN" + n.cab + "/SRN" + n.srn + "/SLOT" + n.slot; }
     if (n.t === "R") return (rruModel(n.u) || n.u.type) + " " + n.u.name;
@@ -3630,11 +3715,11 @@ window.CA_TOOL={
   }
   function applySel() {
     var st = $("physStage"); if (!pModel) return;
-    var set = physSel ? cascade(physSel) : null;
+    var set = physSel ? cascade(physSel) : null, chSel = physSel && /^CH:/.test(physSel) ? physSel.slice(3) : null;
     st.querySelectorAll("[data-node]").forEach(function (el) {
       var id = el.getAttribute("data-node");
       el.classList.toggle("sel", !!set && !!set[id]); el.classList.toggle("dim", !!set && !set[id]);
-      el.classList.toggle("focus", id === physSel);
+      el.classList.toggle("focus", id === physSel || (!!chSel && pModel.nodes[id] && pModel.nodes[id].t === "R" && String(pModel.nodes[id].u.chain) === chSel));
     });
     st.querySelectorAll("path.lk").forEach(function (p) {
       var on = !!set && !!set[p.getAttribute("data-a")] && !!set[p.getAttribute("data-b")];
@@ -3648,10 +3733,13 @@ window.CA_TOOL={
   function handlePhysClick(target) {
     if (!pModel) return;
     var chip = target.closest("[data-n]"), card = target.closest("[data-node]"), id = card ? card.getAttribute("data-node") : null;
-    if (chip) {
+    var hit = target.closest && target.closest("path.lkhit, path.lk[data-chain]");
+    if (hit) id = "CH:" + hit.getAttribute("data-chain");
+    else if (chip) {
       var n = chip.getAttribute("data-n");
       var e = pModel.edges.filter(function (x) { return x.pa === n; })[0];
-      if (e && (n.indexOf("bp:") === 0 || n.indexOf("ra:") === 0)) id = e.b;
+      if (e && n.indexOf("bp:") === 0 && e.chain !== undefined) id = "CH:" + e.chain;
+      else if (e && (n.indexOf("ra:") === 0 || n.indexOf("ro:") === 0)) id = e.b;
     }
     physSel = (id && id !== physSel) ? id : null;
     applySel();
