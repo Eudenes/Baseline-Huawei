@@ -297,7 +297,7 @@
   // ---------- usado por mae_exec.js (botões "Executar no site" das outras abas) ----------
   window.MAE = {
     api: api,
-    state: function () { return { online: online, logged: logged, busy: busy, user: $("maeUser").value }; },
+    state: function () { return { online: online, logged: logged, busy: busy, user: $("maeUser").value, version: helperVersion }; },
     neList: function () { return neList; },
     setBusy: function (v) { busy = !!v; refresh(); },
     log: log
