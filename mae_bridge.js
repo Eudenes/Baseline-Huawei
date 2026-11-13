@@ -294,6 +294,15 @@
       if (online || first) { online = false; logged = false; refresh(); }
     });
   }
+  // ---------- usado por mae_exec.js (botões "Executar no site" das outras abas) ----------
+  window.MAE = {
+    api: api,
+    state: function () { return { online: online, logged: logged, busy: busy, user: $("maeUser").value }; },
+    neList: function () { return neList; },
+    setBusy: function (v) { busy = !!v; refresh(); },
+    log: log
+  };
+
   refresh();
   check(true);
   setInterval(function () { check(false); }, CFG.poll);
