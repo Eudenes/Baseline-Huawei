@@ -5420,5 +5420,69 @@ later();
 })();
 </script>
 
+<style>
+pre.cj-on, textarea.cj-on{ cursor: pointer; }
+::highlight(cj-line){ background-color: rgba(255, 196, 0, .45); }
+.cj-toast{ position: fixed; z-index: 9999; background: #1f2937; color: #fff; font: 12.5px/1.35 system-ui, sans-serif; padding: 6px 10px; border-radius: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.25); pointer-events: none; max-width: 420px; }
+</style>
+<script>
+/* ===== Clique no comando → vai para a resposta dele na caixa de respostas ===== */
+(function(){
+'use strict';
+var PAIRS=[['uniCmds','uniIn'],['cmdsRound2','in2'],['irQ','irIn']];
+var $=function(id){return document.getElementById(id);};
+function nrm(s){return String(s||'').replace(/\s+/g,'').replace(/;+$/,'').toUpperCase();}
+function lineAt(text,pos){var a=text.lastIndexOf('\n',pos-1)+1,b=text.indexOf('\n',pos);if(b<0)b=text.length;return {a:a,b:b,s:text.slice(a,b)};}
+// todas as ocorrências do comando na resposta: eco "%%/*n*/CMD;%%" (preferido) ou linha só com o comando
+function findAll(resp,cmd){var key=nrm(cmd),out=[],lines=resp.split('\n'),pos=0,echo=[];
+  lines.forEach(function(l){var m=l.match(/%%(?:\/\*\d+\*\/)?([^%]*)%%/);
+    if(m&&nrm(m[1])===key)out.push({a:pos,b:pos+l.length});else if(nrm(l)===key)echo.push({a:pos,b:pos+l.length});pos+=l.length+1;});
+  return out.length?out:echo;}
+// início do relatório: sobe até a linha "+++" logo acima (no máx. 4 linhas)
+function reportStart(resp,a){var p=a;for(var i=0;i<3&&p>0;i++){var ln=lineAt(resp,p-1);if(/^\s*\+\+\+/.test(ln.s))return ln.a;p=ln.a;}return a;}
+function caretTop(ta,pos){var cs=getComputedStyle(ta),d=document.createElement('div');
+  ['fontFamily','fontSize','fontWeight','lineHeight','letterSpacing','paddingTop','paddingLeft','paddingRight','borderLeftWidth','borderRightWidth','boxSizing','tabSize','wordSpacing'].forEach(function(k){d.style[k]=cs[k];});
+  d.style.position='absolute';d.style.visibility='hidden';d.style.top='0';d.style.left='-9999px';d.style.width=ta.clientWidth+'px';
+  d.style.whiteSpace=(cs.whiteSpace==='pre'||ta.getAttribute('wrap')==='off')?'pre':'pre-wrap';d.style.wordWrap='break-word';d.style.overflowWrap=cs.overflowWrap;
+  d.textContent=ta.value.slice(0,pos);var sp=document.createElement('span');sp.textContent='​';d.appendChild(sp);document.body.appendChild(d);
+  var t=sp.offsetTop-parseFloat(cs.paddingTop||0);d.remove();return t;}
+var toastEl=null,toastT=null;
+function toast(msg,x,y){if(!toastEl){toastEl=document.createElement('div');toastEl.className='cj-toast';document.body.appendChild(toastEl);}
+  toastEl.textContent=msg;toastEl.style.display='block';toastEl.style.left=Math.max(8,Math.min(x+12,innerWidth-440))+'px';toastEl.style.top=Math.max(8,y-36)+'px';
+  clearTimeout(toastT);toastT=setTimeout(function(){toastEl.style.display='none';},2600);}
+function markCmd(src,a,b){if(!window.CSS||!CSS.highlights||src.tagName!=='PRE'||!src.firstChild)return;try{var r=document.createRange(),n=src.firstChild;r.setStart(n,Math.min(a,n.length));r.setEnd(n,Math.min(b,n.length));CSS.highlights.set('cj-line',new Highlight(r));}catch(e){}}
+var last={};
+function go(src,dst,cmd,ev,la,lb){
+  var resp=dst.value||'';
+  if(!/\S/.test(resp)){toast('Cole as respostas na caixa abaixo primeiro.',ev.clientX,ev.clientY);return;}
+  var hits=findAll(resp,cmd);
+  if(!hits.length){toast('Resposta de "'+cmd.trim()+'" não encontrada na caixa de respostas.',ev.clientX,ev.clientY);return;}
+  var k=src.id+'|'+nrm(cmd),i=(last.k===k&&last.n===hits.length)?(last.i+1)%hits.length:0;last={k:k,i:i,n:hits.length};
+  var h=hits[i],start=reportStart(resp,h.a);
+  markCmd(src,la,lb);
+  var wasDis=dst.disabled;if(wasDis)return;
+  dst.focus({preventScroll:true});dst.setSelectionRange(h.a,h.b);
+  dst.scrollTop=Math.max(0,caretTop(dst,start)-4);
+  var r=dst.getBoundingClientRect();if(r.top<0||r.top>innerHeight-80)dst.scrollIntoView({block:'center',behavior:'smooth'});
+  if(hits.length>1)toast('Resposta '+(i+1)+' de '+hits.length+' — clique de novo para a próxima.',ev.clientX,ev.clientY);
+}
+function offsetInPre(pre,ev){var n,o;
+  if(document.caretRangeFromPoint){var r=document.caretRangeFromPoint(ev.clientX,ev.clientY);if(!r)return -1;n=r.startContainer;o=r.startOffset;}
+  else if(document.caretPositionFromPoint){var p=document.caretPositionFromPoint(ev.clientX,ev.clientY);if(!p)return -1;n=p.offsetNode;o=p.offset;}else return -1;
+  if(!pre.contains(n))return -1;var rr=document.createRange();rr.setStart(pre,0);rr.setEnd(n,o);return rr.toString().length;}
+function hasResp(dst){return dst&&!dst.disabled&&/\S/.test(dst.value||'');}
+PAIRS.forEach(function(p){var src=$(p[0]),dst=$(p[1]);if(!src||!dst)return;
+  src.title='Clique num comando para ir até a resposta dele na caixa de respostas';
+  var upd=function(){src.classList.toggle('cj-on',hasResp(dst));};
+  ['input','change'].forEach(function(e){dst.addEventListener(e,upd);});setInterval(upd,1500);upd();
+  src.addEventListener('click',function(ev){
+    var sel=window.getSelection&&window.getSelection();
+    if(src.tagName==='TEXTAREA'){if(src.selectionStart!==src.selectionEnd)return;var t=src.value,L=lineAt(t,src.selectionStart);if(!/\S/.test(L.s))return;go(src,dst,L.s,ev,L.a,L.b);return;}
+    if(sel&&!sel.isCollapsed&&String(sel).length)return; // seleção manual: não interfere
+    var off=offsetInPre(src,ev);if(off<0)return;var t2=src.textContent,L2=lineAt(t2,off);if(!/\S/.test(L2.s))return;go(src,dst,L2.s,ev,L2.a,L2.b);
+  });
+});
+})();
+</script>
 </body>
 </html>
