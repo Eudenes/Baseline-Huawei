@@ -15,19 +15,31 @@ Python que faz a ponte:
 Baseline (GitHub Pages) --HTTP--> helper no PC (127.0.0.1:8765) --TCP 31114--> MAE (10.220.30.9)
 ```
 
-### Instalar o helper (uma vez)
+### Instalar o helper (uma vez em cada computador)
 
-1. Instale o Python 3 (python.org) marcando **"Add Python to PATH"**.
-2. Copie `tools/mml_helper_v2.py` e `tools/Iniciar_Helper_MML.bat` para `C:\MML`.
+1. Abra o Baseline → aba **Entrada**. Com o helper offline aparece **Instalar neste PC (1ª vez)**.
+2. Clique, abra o arquivo baixado `Instalar_Helper_MML.bat` e aguarde o **PRONTO** (se o
+   navegador ou o Windows avisar sobre o arquivo, escolha *Manter* / *Executar assim mesmo*).
+   - Ele instala o Python sozinho (winget) se o PC não tiver.
+   - Copia o helper para `%LOCALAPPDATA%\MML_Helper` e o coloca para **iniciar sozinho com o
+     Windows, sem janela**.
+   - Cria o link `mmlhelper://` usado pelo botão **Iniciar helper** da página (caso ele seja fechado).
+3. Pronto: nos próximos acessos o painel já abre com *helper OK*.
+
+Para atualizar, rode o instalador de novo (a página avisa quando o helper do PC está antigo).
+Para remover: `Instalar_Helper_MML.bat remover`.
+
+> `Instalar_Helper_MML.bat` é gerado a partir de `tools/instalador_modelo.txt` +
+> `tools/mml_helper_v2.py`. Depois de mexer no helper rode `python tools/gerar_instalador.py`.
+> `Iniciar_Helper_MML.bat` continua disponível para rodar o helper manualmente (com janela).
 
 ### Usar
 
 1. Conecte a VPN da operadora (o MAE só responde dentro da rede).
-2. Dê dois cliques em `C:\MML\Iniciar_Helper_MML.bat` e deixe a janela aberta.
-3. Abra o Baseline → aba **Entrada**. O painel mostra *helper OK*.
+2. Abra o Baseline → aba **Entrada**. O painel mostra *helper OK*.
    - Se o Chrome/Edge perguntar se o site pode acessar a **rede local**, clique em **Permitir**.
-4. Informe usuário e senha do MAE → **Conectar**. A lista de sites (LST NE) é carregada.
-5. Busque o site (ex.: `SR-TJMO01`) → **Confirmar: Rodada 1 + Rodada 2**.
+3. Informe usuário e senha do MAE → **Conectar**. A lista de sites (LST NE) é carregada.
+4. Busque o site (ex.: `SR-TJMO01`) → **Confirmar: Rodada 1 + Rodada 2**.
 
 Outros botões: **Só Rodada 1**, **Parar** (para depois do bloco de comandos atual) e
 **Exportar log (.txt)** (log + respostas completas).

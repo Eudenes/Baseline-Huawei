@@ -11,7 +11,9 @@
     helper: "http://127.0.0.1:8765",
     batch: 8,                                  // comandos por chamada /run (permite "Parar" e mostra progresso)
     neTypes: /BTS3900|BTS5900|DBS|NODEB|GNODEB/i,
-    poll: 10000
+    poll: 10000,
+    minVersion: 2.1,                           // helper mais antigo = lento (espera 1,5 s por comando)
+    installer: "tools/Instalar_Helper_MML.bat"
   };
   var WRITE_RE = /^\s*(ADD|MOD|RMV|SET|ACT|DLD|RST|BLK|UBL|STR|STP)\s/i;
   var $ = function (id) { return document.getElementById(id); };
@@ -35,7 +37,10 @@
     "#maeLog{margin:10px 0 0;background:var(--mono-bg);border:1px solid var(--mono-border);color:#c9d1d9;font:12.5px/1.45 Consolas,'Courier New',monospace;border-radius:6px;padding:8px 12px;max-height:220px;overflow:auto;white-space:pre-wrap;display:none}" +
     "#maeLog .ok{color:#3fb950}#maeLog .er{color:#f85149}#maeLog .in{color:#79c0ff}" +
     "#maeInfo{font-size:13px;color:var(--text-muted)}" +
-    "#maeHelp{font-size:13px;color:var(--text-muted);margin:8px 0 0}#maeHelp code{font-family:Consolas,monospace;background:var(--surface-alt);padding:1px 5px;border-radius:4px}";
+    "#maeBox .mae-note{font-size:13px;color:var(--text-muted);margin:8px 0 0}" +
+    "#maeOld{color:var(--warning)!important;background:var(--warning-bg);padding:6px 10px;border-radius:6px}#maeOld a{color:inherit;font-weight:600;cursor:pointer}" +
+    "#maeBox a.mae-btn{display:inline-block;font-family:'Segoe UI',Arial,sans-serif;font-weight:600;font-size:13.5px;border-radius:6px;padding:9px 16px;border:1px solid var(--border);color:var(--text);text-decoration:none;cursor:pointer}" +
+    "#maeBox a.mae-btn:hover{border-color:var(--accent);color:var(--accent)}";
   document.head.appendChild(st);
 
   // ---------- painel ----------
@@ -63,7 +68,12 @@
       '<button class="ghost" type="button" id="maeStop" disabled>Parar</button>' +
       '<button class="ghost" type="button" id="maeExport" disabled>Exportar log (.txt)</button>' +
     '</div>' +
-    '<p id="maeHelp" hidden>Helper offline: no PC, dê dois cliques em <code>Iniciar_Helper_MML.bat</code> (pasta <code>C:\\MML</code>) e mantenha a janela aberta. O resto do Baseline funciona normalmente sem ele.</p>' +
+    '<div id="maeHelp" hidden><div class="row">' +
+      '<button class="primary" type="button" id="maeStart">Iniciar helper</button>' +
+      '<a class="ghost mae-btn" id="maeInstall" download="Instalar_Helper_MML.bat">Instalar neste PC (1ª vez)</a>' +
+    '</div><p class="mae-note">Helper offline. <b>Primeira vez neste computador?</b> Clique em <b>Instalar neste PC</b>, abra o arquivo baixado e aguarde o “PRONTO”: depois disso ele liga sozinho com o Windows. ' +
+    'Se já instalou, clique em <b>Iniciar helper</b> (o navegador pergunta se pode abrir — marque “sempre permitir”). O resto do Baseline funciona normalmente sem ele.</p></div>' +
+    '<p class="mae-note" id="maeOld" hidden>⚠ O helper deste PC é de uma versão antiga e mais lenta. Clique em <a id="maeInstall2" download="Instalar_Helper_MML.bat">Atualizar helper</a> e abra o arquivo baixado.</p>' +
     '<div id="maeLog" aria-live="polite"></div>';
   var pane = $("pane-in");
   pane.insertBefore(box, pane.firstChild);
@@ -102,7 +112,9 @@
     });
   }
 
+  var helperVersion = null;
   function refresh(userTxt) {
+    $("maeOld").hidden = !online || helperVersion === null || helperVersion >= CFG.minVersion;
     var dot = $("maeDot");
     dot.className = online ? (logged ? "on" : "") : "off";
     $("maeSt").textContent = !online ? "helper offline" : logged ? "conectado como " + (userTxt || $("maeUser").value || "") : "helper OK · não conectado";
@@ -155,7 +167,7 @@
     if (!cmds.length) throw new Error("Nenhum comando na " + label + ".");
     if (!confirmWrites(cmds, label)) throw new Error("Cancelado pelo usuário.");
     log(label + ": " + cmds.length + " comandos em " + ne + "…", "in");
-    var resp = [], okN = 0, erN = 0;
+    var resp = [], okN = 0, erN = 0, tr = Date.now();
     for (var i = 0; i < cmds.length; i += CFG.batch) {
       if (abort) throw new Error("Interrompido pelo usuário (" + label + ", " + i + " de " + cmds.length + " comandos).");
       var r = await api("/run", { ne: ne, cmds: cmds.slice(i, i + CFG.batch), stopOnError: false });
@@ -170,7 +182,7 @@
         log((x.ok ? "✔ " : "✖ ") + x.cmd, x.ok ? "ok" : "er");
       });
     }
-    log(label + ": " + okN + " ok" + (erN ? ", " + erN + " com erro" : "") + ".", erN ? "er" : "ok");
+    log(label + ": " + okN + " ok" + (erN ? ", " + erN + " com erro" : "") + " em " + Math.round((Date.now() - tr) / 1000) + " s.", erN ? "er" : "ok");
     return resp.join("\n");
   }
 
@@ -209,6 +221,7 @@
     } catch (e) {
       log(e.message, "er");
     } finally {
+      await api("/unreg", {}).catch(function () {});
       busy = false; refresh();
     }
   }
@@ -256,13 +269,22 @@
   $("maeOnly1").addEventListener("click", function () { go(false); });
   $("maeStop").addEventListener("click", function () { abort = true; log("Parando após o bloco atual…", "er"); });
   $("maeExport").addEventListener("click", exportLog);
+  $("maeInstall").href = $("maeInstall2").href = CFG.installer;
+  $("maeStart").addEventListener("click", function () {
+    log("Iniciando o helper…", "in");
+    location.href = "mmlhelper://start";
+    var n = 0, t = setInterval(function () {        // procura o helper a cada 1 s por 20 s
+      if (online || ++n > 20) { clearInterval(t); if (!online) log("Helper não respondeu. Se é a 1ª vez neste PC, use \"Instalar neste PC\".", "er"); return; }
+      check(false);
+    }, 1000);
+  });
 
   // ---------- status do helper (verifica a cada 10 s, sem atrapalhar o resto da página) ----------
   function check(first) {
     if (busy) return;
     fetch(CFG.helper + "/").then(function (r) { return r.json(); }).then(function (s) {
       var was = online;
-      online = true; logged = !!s.logged;
+      online = true; logged = !!s.logged; helperVersion = parseFloat(s.version || "2.0") || 2.0;
       refresh(s.user);
       if (!was && !first) log("Helper conectado (MAE " + s.mae + ").", "ok");
       if (first) log("Helper OK (MAE " + s.mae + ").", "ok");
