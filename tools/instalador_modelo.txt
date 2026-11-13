@@ -68,6 +68,14 @@ $pyw = Join-Path (Split-Path $py) 'pythonw.exe'
 if (-not (Test-Path $pyw)) { $pyw = $py }
 Write-Host "Python: $py"
 
+# 1b) paramiko (SFTP, usado pelo painel KPIs MAE). Se falhar, o resto do helper funciona.
+$oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+& $py -m pip install --user --disable-pip-version-check -q paramiko *> $null
+& $py -c "import paramiko" *> $null
+$okParamiko = ($LASTEXITCODE -eq 0)
+$ErrorActionPreference = $oldEap
+if ($okParamiko) { Write-Host 'paramiko (SFTP): OK' } else { Write-Host 'Aviso: nao consegui instalar o paramiko (SFTP). O MML funciona; o painel KPIs MAE nao.' -ForegroundColor Yellow }
+
 # 2) Copia o helper (embutido neste arquivo)
 Stop-Helper
 New-Item -ItemType Directory -Force -Path $dir | Out-Null

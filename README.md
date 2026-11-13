@@ -70,3 +70,18 @@ Linhas começando com `//` são ignoradas.
 python mml_helper_v2.py --mae 10.220.30.9:31114   # outro MAE
 python mml_helper_v2.py --port 8765               # outra porta local
 ```
+
+## KPIs MAE (aba RAN Sharing) — fase 1: descoberta no SFTP
+
+Painel **KPIs MAE · Explorar SFTP** no topo da aba RAN Sharing (recolhido por padrão). Precisa do
+helper **v2.2+** com `paramiko` (o instalador já instala; para atualizar, rode o instalador de novo).
+
+- Login SFTP (10.220.30.9:22, somente leitura; pode reaproveitar a senha do MML — fica só no helper).
+- **Escanear pastas**: árvore de `/opt/oss/server/var/fileint` com nº de arquivos e data mais recente.
+- **Peek**: abre 1 arquivo (`.xml.gz`, `.xml`, `.csv`), mostra as 80 primeiras linhas e um resumo
+  (measInfo, granularidade, measTypes nomes/IDs, tipos de `measObjLdn`, NEs conhecidos).
+- **Procurar RAN automaticamente**: abre o arquivo mais recente de cada pasta com dados e diz se há RAN.
+- **Baixar relatório (.txt)** para enviar e seguir para a fase 2 (coleta e conversão para o formato do Query Result).
+
+Rotas do helper: `POST /sftp/login {user,pwd,useMml}`, `POST /sftp/logout`, `GET /sftp/ls?path=`,
+`GET /sftp/scan?root=&depth=`, `GET /sftp/peek?path=`, `GET /sftp/probe?root=&depth=`.
