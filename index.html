@@ -563,6 +563,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
     <button type="button" class="app-tab" role="tab" id="tab-doc" aria-controls="pane-doc" aria-selected="false"><span class="tn">6</span>Documentação lógica<span class="bdg" id="bdg-doc"></span></button>
     <button type="button" class="app-tab" role="tab" id="tab-bl" aria-controls="pane-bl" aria-selected="false"><span class="tn">7</span>Baseline (templates)<span class="bdg" id="bdg-bl"></span></button>
     <button type="button" class="app-tab" role="tab" id="tab-rs" aria-controls="pane-rs" aria-selected="false"><span class="tn">8</span>RAN Sharing<span class="bdg" id="bdg-rs"></span></button>
+    <button type="button" class="app-tab" role="tab" id="tab-sw" aria-controls="pane-sw" aria-selected="false"><span class="tn">9</span>SW &amp; CFGFILE<span class="bdg" id="bdg-sw"></span></button>
   </nav>
 </header>
 
@@ -1670,6 +1671,9 @@ MOD NRDUCELLPUSCH:NRDUCELLID=11,ULSMARTPREALLOCATIONDUR=250;
 <div class="pane" id="pane-rs" role="tabpanel" aria-labelledby="tab-rs" hidden>
   <iframe id="rsFrame" title="RAN Sharing TIM × VIVO" allow="clipboard-read; clipboard-write; fullscreen"></iframe>
 </div>
+
+<!-- ================= ABA 9 — SW & CFGFILE (conteúdo montado por js/sw_cfgfile.js) ================= -->
+<div class="pane scB" id="pane-sw" role="tabpanel" aria-labelledby="tab-sw" hidden></div>
 
 </main>
 
@@ -4713,7 +4717,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
-  var TABS = ["in", "ca", "pl", "ph", "pw", "doc", "bl", "rs"];
+  var TABS = ["in", "ca", "pl", "ph", "pw", "doc", "bl", "rs", "sw"];
   var CA_CMDS = ["DSP CELL:;", "LST EUTRANINTERNFREQ:;", "LST UTRANNFREQ:;", "LST EUTRANINTERFREQNCELL:;", "LST EUTRANEXTERNALCELL:;", "LST PCCFREQCFG:;", "LST SCCFREQCFG:;", "LST ENODEBFUNCTION:;", "LST GNODEBFUNCTION:;", "LST CNOPERATORTA:;", "LST GNBTRACKINGAREA:;"];
   var ALL_CMDS = (window.PL_TOOL.cmds || []).slice();
   CA_CMDS.concat(["LST PDSCHCFG:;", "LST CELLDLPCPDSCHPA:;"]).forEach(function (c) { if (ALL_CMDS.indexOf(c) === -1) ALL_CMDS.push(c); });
@@ -5487,5 +5491,6 @@ PAIRS.forEach(function(p){var src=$(p[0]),dst=$(p[1]);if(!src||!dst)return;
 <script src="mae_bridge.js"></script>
 <script src="mae_exec.js"></script>
 <script src="js/kpi_mae.js"></script>
+<script src="js/sw_cfgfile.js"></script>
 </body>
 </html>

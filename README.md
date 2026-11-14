@@ -85,3 +85,51 @@ helper **v2.2+** com `paramiko` (o instalador já instala; para atualizar, rode 
 
 Rotas do helper: `POST /sftp/login {user,pwd,useMml}`, `POST /sftp/logout`, `GET /sftp/ls?path=`,
 `GET /sftp/scan?root=&depth=`, `GET /sftp/peek?path=`, `GET /sftp/probe?root=&depth=`.
+
+## SW & CFGFILE (aba 9)
+
+Precisa do helper **v3.2+** (rode o instalador de novo; a aba avisa quando o helper do PC é antigo) e
+da conexão feita no painel **Executar no MAE** da aba Entrada.
+
+- **CFGFILE** — envia um XML ao servidor de arquivos (FTP ou SFTP, pelo helper), confere o tamanho e só
+  então libera o `DLD CFGFILE` no site escolhido. Upload e execução têm resultados separados.
+  O servidor do **upload** (padrão `10.220.30.9`) e o IP que vai **no comando** (padrão `10.220.4.134`,
+  visto só pelos sites) são campos diferentes.
+- **Software** — perfis RAN19 SPC220, RAN19 SPC260, RAN20 SPC270, Supply, BLS e Personalizado. Gera
+  `DLD SOFTWARE` / `SPL SOFTWARE` e, se pedido, `ACT SOFTWARE`.
+- **Status e logs** — histórico da sessão (exportável) e ajustes de espera.
+
+Os comandos demorados rodam **em segundo plano no helper**, em uma sessão MML própria: o percentual
+aparece no topo da aba e no botão da aba 9, e as outras abas continuam livres (até recarregar a página).
+
+Segurança:
+- Nenhuma senha fica no código, no repositório, no `localStorage` ou em log. É digitada na sessão e
+  aparece sempre como `PWD="********"`; a real só vai no envio ao site.
+- `ACT SOFTWARE` e `ACT CFGFILE` reiniciam o site: exigem digitar `ATIVAR <NE>`. O ACT automático ao fim
+  do download vem desmarcado e pede uma 2ª confirmação.
+- O fim do download é detectado por: último relatório sem `To be continued` **e** silêncio de N segundos
+  (padrão 20). O texto final real ainda não foi validado em campo; expressões de fim/falha e o comando de
+  status são configuráveis em **Status e logs**.
+
+Rotas novas do helper:
+
+| Rota | Função |
+|---|---|
+| `POST /job/start {ne, title, steps:[{cmd,label,long,maxsec,quiet}], pctRe, doneRe, failRe}` | inicia a tarefa (aceita `#WAIT` / `#UNTIL`) |
+| `GET /job/status?id=&full=1` · `GET /job/list` · `POST /job/stop {id}` | andamento (com percentual) e parada |
+| `POST /file-server/test {host,protocol,port,user,pwd,dir,probe}` | testa conexão/login; `probe` tenta também FTP 21 e SFTP 22 |
+| `POST /file-server/list {…,dir}` | lista o diretório |
+| `POST /file-server/upload {…,dir,name,data(base64),overwrite,direct}` | envia como `.part`, confere o tamanho e renomeia |
+| `POST /pm/fetch` · `GET /pm/progress` · `POST /pm/abort` | coleta PM (vindas do `mml_helper_v3.py`) |
+
+### Roteiro do primeiro teste (na máquina com VPN)
+
+1. Rode `tools/Instalar_Helper_MML.bat` e aguarde o **PRONTO**.
+2. Abra o Baseline → aba **Entrada** → **Conectar** (usuário e senha do MAE).
+3. Aba **9 SW & CFGFILE** → digite o site de teste no topo.
+4. **CFGFILE**: digite a senha → **Testar conexão** (mostra qual protocolo/porta respondeu) → **Listar diretório**.
+5. Escolha um XML pequeno → **Enviar XML** → confira o **Caminho remoto**.
+6. **Gerar comando** → confira → **Executar na BBU** (deixe o ACT desmarcado) → confira o **RETCODE**.
+7. **Software**: escolha cada perfil e confira o comando. Aplique um download **sem** ACT automático e
+   observe como o site encerra o download; só depois use o ACT.
+
