@@ -17,23 +17,82 @@ $py_file = Join-Path $dir 'mml_helper_v2.py'
 $lnk  = Join-Path ([Environment]::GetFolderPath('Startup')) 'MML Helper.lnk'
 $reg  = 'HKCU:\Software\Classes\mmlhelper'
 
-function Stop-Helper {
+# qualquer helper MML rodando (v2 instalado, v3 aberto na mao etc.) - todos usam a porta 8765
+function Get-HelperProcs {
   Get-CimInstance Win32_Process -Filter "Name like 'python%' or Name like 'py%'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like '*mml_helper_v2.py*' } |
-    ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force } catch {} }
+    Where-Object { $_.CommandLine -like '*mml_helper*' }
+}
+function Stop-Helper {
+  Get-HelperProcs | ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force } catch {} }
+}
+
+# Confere se o caminho e um Python 3.8+ que funciona. O atalho falso da Microsoft Store (python.exe
+# em WindowsApps sem o Python instalado) falha neste teste sozinho; o Python real da Store passa.
+function Test-Py($p) {
+  if (-not $p) { return $null }
+  $p = ([string]$p).Trim().Trim('"')
+  if ($p -like '*pythonw.exe') { $p = Join-Path (Split-Path $p) 'python.exe' }
+  if ($p -notlike '*\WindowsApps\*' -and -not (Test-Path $p -PathType Leaf)) { return $null }
+  try {
+    $v = @(& $p -c "import sys;print('%d.%d' % sys.version_info[:2]);print(sys.executable)" 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $v.Count -ge 2 -and [version]([string]$v[0]).Trim() -ge [version]'3.8') { return ([string]$v[1]).Trim() }
+  } catch {}
+  return $null
 }
 
 function Find-Python {
-  foreach ($c in @('py', 'python')) {
+  $c = New-Object System.Collections.Generic.List[string]
+  # 1) o Python que ja roda o helper agora (ex.: mml_helper_v3.py aberto na mao)
+  Get-HelperProcs | ForEach-Object { if ($_.ExecutablePath) { $c.Add($_.ExecutablePath) } }
+  # 2) o Python da instalacao anterior (atalho de inicializacao e link mmlhelper://)
+  if (Test-Path $lnk) { try { $c.Add((New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath) } catch {} }
+  try { $cmd = (Get-ItemProperty -Path "$reg\shell\open\command" -ErrorAction Stop).'(default)'; if ($cmd -match '^"([^"]+)"') { $c.Add($matches[1]) } } catch {}
+  # 3) comandos no PATH
+  foreach ($n in @('py', 'python', 'python3')) {
     try {
-      $p = (& $c -c "import sys;print(sys.executable)" 2>$null | Select-Object -First 1)
-      if ($LASTEXITCODE -eq 0 -and $p -and (Test-Path $p.Trim())) { return $p.Trim() }
+      # sem "Select-Object -First 1": ele interrompe o Python e o codigo de saida vira erro
+      $o = @(& $n -c "import sys;print(sys.executable)" 2>$null)
+      if ($LASTEXITCODE -eq 0 -and $o.Count -and $o[0]) { $c.Add([string]$o[0]) }
     } catch {}
   }
-  $g = Get-ChildItem -Path "$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe", "$env:ProgramFiles\Python3*\python.exe" -ErrorAction SilentlyContinue |
-       Sort-Object FullName -Descending | Select-Object -First 1
-  if ($g) { return $g.FullName }
+  # 4) registro do Windows (instalador oficial)
+  foreach ($root in @('HKCU:\Software\Python\PythonCore', 'HKLM:\Software\Python\PythonCore', 'HKLM:\Software\WOW6432Node\Python\PythonCore')) {
+    Get-ChildItem $root -ErrorAction SilentlyContinue | Sort-Object PSChildName -Descending | ForEach-Object {
+      try {
+        $ip = Get-ItemProperty -Path (Join-Path $_.PSPath 'InstallPath') -ErrorAction Stop
+        if ($ip.ExecutablePath) { $c.Add($ip.ExecutablePath) }
+        if ($ip.'(default)') { $c.Add((Join-Path $ip.'(default)' 'python.exe')) }
+      } catch {}
+    }
+  }
+  # 5) pastas comuns (python.org, Anaconda, Miniconda)
+  $pats = @("$env:LOCALAPPDATA\Programs\Python\Python3*\python.exe", "$env:ProgramFiles\Python3*\python.exe",
+            "${env:ProgramFiles(x86)}\Python3*\python.exe", "$env:SystemDrive\Python3*\python.exe",
+            "$env:USERPROFILE\anaconda3\python.exe", "$env:USERPROFILE\miniconda3\python.exe",
+            "$env:ProgramData\anaconda3\python.exe", "$env:ProgramData\miniconda3\python.exe")
+  Get-ChildItem -Path $pats -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | ForEach-Object { $c.Add($_.FullName) }
+  foreach ($p in $c) { $ok = Test-Py $p; if ($ok) { return $ok } }
   return $null
+}
+
+# Instala o Python: winget (so a origem "winget": a origem msstore costuma ser bloqueada na rede da
+# empresa) e, se falhar, baixa o instalador oficial do python.org e instala so para este usuario.
+function Install-Python {
+  $oldEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+  if (Get-Command winget -ErrorAction SilentlyContinue) {
+    Write-Host 'Tentando pelo winget...'
+    winget install -e --id Python.Python.3.12 --source winget --scope user --silent --accept-package-agreements --accept-source-agreements | Out-Host
+  }
+  $ErrorActionPreference = $oldEap
+  if (Find-Python) { return }
+  Write-Host 'Tentando baixar do python.org...'
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $exe = Join-Path $env:TEMP 'python-3.12.7-amd64.exe'
+    Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe' -OutFile $exe -UseBasicParsing
+    Start-Process -FilePath $exe -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_test=0' -Wait
+    Remove-Item $exe -Force -ErrorAction SilentlyContinue
+  } catch { Write-Host ('Download falhou: ' + $_.Exception.Message) -ForegroundColor Yellow }
 }
 
 Write-Host ''
@@ -51,10 +110,8 @@ if ($acao -eq 'remover') {
 # 1) Python
 $py = Find-Python
 if (-not $py) {
-  Write-Host 'Python nao encontrado. Instalando pelo winget (pode levar 1-2 min)...' -ForegroundColor Yellow
-  try {
-    winget install -e --id Python.Python.3.12 --scope user --silent --accept-package-agreements --accept-source-agreements | Out-Host
-  } catch {}
+  Write-Host 'Python nao encontrado neste PC. Instalando (pode levar 1-2 min)...' -ForegroundColor Yellow
+  Install-Python
   $py = Find-Python
 }
 if (-not $py) {
@@ -62,6 +119,7 @@ if (-not $py) {
   Write-Host 'Nao consegui instalar o Python automaticamente.' -ForegroundColor Red
   Write-Host 'Instale em https://www.python.org/downloads/ (marque "Add python.exe to PATH")'
   Write-Host 'e rode este instalador de novo.'
+  Write-Host 'Se este PC ja roda o helper, deixe o helper aberto e rode o instalador de novo: ele usa o mesmo Python.'
   return
 }
 $pyw = Join-Path (Split-Path $py) 'pythonw.exe'
