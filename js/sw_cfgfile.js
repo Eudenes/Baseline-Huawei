@@ -1,12 +1,14 @@
-/* sw_cfgfile.js — aba 9 "SW & CFGFILE" do Baseline Huawei.
+/* sw_cfgfile.js — aba "SW & CFGFILE" (2ª aba) do Baseline Huawei.
    · Software : gera DLD / ACT / SPL SOFTWARE por perfil e aplica no site.
    · CFGFILE  : envia um XML ao servidor de arquivos (pelo helper) e manda a BBU executar DLD CFGFILE.
    · Status e logs: acompanhamento, histórico da sessão e ajustes de espera.
    Usa a conexão do painel "Executar no MAE" (mae_bridge.js) e o helper v3.2+ (rotas /job/* e /file-server/*).
    Os comandos demorados rodam em segundo plano no helper: a página só consulta o andamento, então
    dá para trocar de aba à vontade.
-   SENHAS: ficam só nos campos de senha (memória da página). Nunca vão para localStorage, logs ou tela;
-   tudo que é exibido/copiado/exportado sai como PWD="********". */
+   SENHAS: a senha padrão fica guardada no helper deste PC (cifrada pelo Windows) e nunca volta para a
+   página: aqui só vai o marcador SAVED (o helper troca pela senha real na hora do envio). Senha digitada
+   num campo fica só na memória da página. Nada vai para localStorage, logs ou tela; tudo que é
+   exibido/copiado/exportado sai como PWD="********". */
 (function () {
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
@@ -15,7 +17,8 @@
   if (!pane) return;
   if (!window.MAE) { pane.innerHTML = '<p class="muted" style="padding:20px">Painel do MAE (mae_bridge.js) não carregado.</p>'; return; }
 
-  var HELPER = "http://127.0.0.1:8765", MINV = 3.2, LS_KEY = "swCfgV1";
+  var HELPER = "http://127.0.0.1:8765", MINV = 3.3, LS_KEY = "swCfgV2";
+  var SAVED = "__SENHA_SALVA__", savedPwd = false;
   var MASK = 'PWD="********"';
   var mask = function (s) { return String(s || "").replace(/PWD\s*=\s*"[^"]*"/gi, MASK); };
 
@@ -52,6 +55,16 @@
     "#pane-sw label.chk input{width:auto}",
     "#pane-sw .sw-cmd{margin:10px 0 0;background:var(--mono-bg);border:1px solid var(--mono-border);color:var(--mono-text);font:12.5px/1.5 Consolas,'Courier New',monospace;border-radius:6px;padding:10px 12px;white-space:pre-wrap;word-break:break-all;min-height:40px;max-height:260px;overflow:auto}",
     "#pane-sw .sw-cmd.resp{color:#c9d1d9;max-height:320px}",
+    "#pane-sw .sw-pw{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:10px 16px;margin:-6px 0 14px}",
+    "#pane-sw .sw-pw input{width:220px}",
+    "#pane-sw .sw-drop{border:2px dashed var(--border);border-radius:10px;background:var(--surface-alt);padding:22px 16px;text-align:center;cursor:pointer;transition:background .15s,border-color .15s}",
+    "#pane-sw .sw-drop:hover,#pane-sw .sw-drop:focus-visible{border-color:var(--accent);outline:none}",
+    "#pane-sw .sw-drop.over{border-color:var(--accent);background:#fff1f1}",
+    "#pane-sw .sw-drop.has{border-style:solid;border-color:#16613a;background:#e3f6ea}",
+    "#pane-sw .sw-drop .ic{font-size:30px;line-height:1}",
+    "#pane-sw .sw-drop b{display:block;font-size:14.5px;margin:6px 0 2px}",
+    "#pane-sw .sw-drop span{color:var(--text-muted);font-size:12.5px}",
+    "#pane-sw .sw-drop.has b{color:#16613a;font-family:Consolas,'Courier New',monospace;word-break:break-all}",
     "#pane-sw .sw-warn{background:var(--warning-bg);color:var(--warning);border-radius:6px;padding:8px 12px;margin-top:10px;font-size:13px}",
     "#pane-sw .sw-note{color:var(--text-muted);font-size:12.5px;margin:6px 0 0}",
     "#pane-sw .sw-res{display:grid;grid-template-columns:150px 1fr;gap:8px 12px;margin-top:12px;align-items:start;font-size:13px}",
@@ -95,7 +108,7 @@
 
   // ---------- HTML ----------
   function fld(label, id, attrs, cls) { return '<label' + (cls ? ' class="' + cls + '"' : '') + '>' + label + '<input id="' + id + '" ' + (attrs || 'type="text"') + ' spellcheck="false" autocomplete="off"></label>'; }
-  function pwd(label, id) { return '<label>' + label + '<input id="' + id + '" type="password" autocomplete="new-password" placeholder="digite nesta sessão"></label>'; }
+  function pwd(label, id) { return '<label>' + label + '<input id="' + id + '" type="password" class="sw-pwf" autocomplete="new-password" placeholder="digite nesta sessão"></label>'; }
 
   pane.innerHTML =
     '<div class="sw-top">' +
@@ -104,6 +117,14 @@
       '<button class="ghost" type="button" id="swNeUse">Usar site carregado</button>' +
       '<span class="sw-chip c-no" id="swConn">verificando…</span>' +
       '<button class="ghost" type="button" data-goto="in" id="swGoIn" hidden>Conectar na aba Entrada</button>' +
+    '</div>' +
+    '<div class="sw-pw" id="swPwBar">' +
+      '<b>🔒 Senha padrão (FTP e comandos)</b>' +
+      '<span id="swPwSt" class="sw-chip c-no">…</span>' +
+      '<span id="swPwSet"><input type="password" id="swPwNew" autocomplete="new-password" placeholder="digite uma vez"> <button class="primary" type="button" id="swPwSave">Salvar neste PC</button></span>' +
+      '<button class="ghost" type="button" id="swPwChange" hidden>Trocar</button>' +
+      '<button class="ghost" type="button" id="swPwDel" hidden>Apagar</button>' +
+      '<span class="sw-note" id="swPwNote" style="margin:0">Fica guardada só no helper deste computador (protegida pelo Windows). Nunca aparece na tela nem vai para o GitHub.</span>' +
     '</div>' +
     '<div class="sw-warn" id="swOld" hidden>⚠ O helper deste PC é antigo e não tem as funções desta aba. <a id="swInst" download="Instalar_Helper_MML.bat" href="tools/Instalar_Helper_MML.bat"><b>Baixar o instalador atualizado</b></a>, abrir o arquivo e aguardar o “PRONTO”.</div>' +
     '<div id="swJobs"></div>' +
@@ -117,7 +138,10 @@
     '<div id="swP-cfg"><div class="sw-grid">' +
       '<section class="step"><div class="step-head"><span class="step-num">1</span><h2>Enviar o XML ao servidor de arquivos</h2></div>' +
         '<p class="instr">O arquivo sai deste PC, passa pelo helper e é gravado na pasta do servidor.</p>' +
-        '<div class="row" style="margin-top:0"><input type="file" id="cfFile" accept=".xml,text/xml,application/xml"><span id="cfFileInfo" class="muted"></span></div>' +
+        '<div class="sw-drop" id="cfDrop" tabindex="0" role="button" aria-label="Escolher ou arrastar o arquivo XML">' +
+          '<div class="ic">📄</div><b id="cfDropName">Arraste o arquivo XML aqui</b><span id="cfFileInfo">ou clique para escolher no computador</span>' +
+          '<input type="file" id="cfFile" accept=".xml,text/xml,application/xml" hidden>' +
+        '</div>' +
         '<div class="sw-f">' +
           fld("Servidor (upload)", "cfHost", 'type="text" class="mono"') +
           '<label>Protocolo<select id="cfProto"><option>FTP</option><option>SFTP</option></select></label>' +
@@ -187,7 +211,7 @@
           '<button class="ghost" type="button" id="swCopy">Copiar comando</button>' +
           '<button class="ghost" type="button" id="swStatus">Verificar status agora</button>' +
         '</div>' +
-        '<p class="sw-note">O andamento (percentual) aparece no topo desta aba e no número da aba 9. Você pode trocar de aba enquanto o site baixa.</p>' +
+        '<p class="sw-note">O andamento (percentual) aparece no topo desta aba e no botão “SW &amp; CFGFILE”. Você pode trocar de aba enquanto o site baixa.</p>' +
         '<div class="sw-cmd resp" id="swStOut" hidden></div>' +
       '</section>' +
     '</div></div>' +
@@ -215,7 +239,7 @@
     '</div></div>';
 
   // ---------- valores iniciais (só dados NÃO sigilosos são lembrados) ----------
-  var DEF = { cfHost: "10.220.30.9", cfProto: "FTP", cfPort: "21", cfUser: "ftpuser", cfDir: "/ftproot/ronaldinho",
+  var DEF = { cfHost: "10.220.30.9", cfProto: "SFTP", cfPort: "22", cfUser: "ftpuser", cfDir: "/ftproot/ronaldinho",
     ccIp: "10.220.4.134", ccUser: "ftpuser", ccDir: "/ftproot/ronaldinho", ccEnc: "UNENCRYPTED", ccFoc: "TRUE",
     swIp: "10.220.4.134", swUser: "neftpuser",
     stCmd: "DSP SOFTSTATUS:;", stPct: "(\\d{1,3})\\s*%", stQuiet: "20", stMax: "120", stDone: "", stFail: "", stUntil: "" };
@@ -257,6 +281,13 @@
     return v;
   }
   function need(v, name) { if (!v) throw new Error("Preencha: " + name + "."); return v; }
+  // senha de um campo: o que foi digitado OU o marcador da senha salva no helper
+  function pwOf(id, name) {
+    var v = $(id).value;
+    if (v) return v;
+    if (savedPwd) return SAVED;
+    throw new Error("Falta a senha (" + name + "): salve a senha padrão no topo da aba ou digite no campo.");
+  }
 
   // ---------- janela de confirmação (sem alert/confirm do navegador) ----------
   function ask(o) {
@@ -473,7 +504,7 @@
     var p = PROF[$("swProf").value];
     var o = { kind: p.kind, ip: clean($("swIp").value, "Servidor"), usr: clean($("swUser").value, "Usuário"), dir: clean($("swDir").value, "Diretório"),
       sv: clean($("swSv").value, "Versão"), swt: clean($("swSwt").value, "SWT"), atl: clean($("swAtl").value, "ATL") };
-    o.pwd = real ? clean($("swPwd").value, "Senha") : "********";
+    o.pwd = real ? clean(pwOf("swPwd", "Senha do software"), "Senha") : "********";
     return o;
   }
   function swCmds(o) {
@@ -485,7 +516,7 @@
   }
   function swCheck(o, forAct) {
     need(o.swt, "SWT"); need(o.sv, "Versão (SV)");
-    if (!forAct) { need(o.ip, "Servidor"); need(o.usr, "Usuário (USR) — obrigatório"); need(o.dir, "Diretório"); need($("swPwd").value, "Senha (PWD)"); }
+    if (!forAct) { need(o.ip, "Servidor"); need(o.usr, "Usuário (USR) — obrigatório"); need(o.dir, "Diretório"); }
   }
   function applyProf() {
     var k = $("swProf").value, p = PROF[k];
@@ -521,7 +552,7 @@
     var c = swCmds(o), auto = $("swAuto").checked && !!c.act, verb = o.kind === "spl" ? "SPL SOFTWARE" : "DLD SOFTWARE";
     var html = (R.known ? "" : '<div class="dg">' + esc(R.ne) + ' não está na lista de NEs do MAE.</div>') +
       '<dl><dt>Site (NE)</dt><dd>' + esc(R.ne) + '</dd><dt>Versão</dt><dd>' + esc(o.sv) + '</dd><dt>Servidor</dt><dd>' + esc(o.ip) + '</dd></dl><pre>' + esc(mask(c.main)) + '</pre>' +
-      '<p>O download demora; o percentual aparece no topo da aba 9 e você pode usar as outras abas.</p>';
+      '<p>O download demora; o percentual aparece no topo da aba SW &amp; CFGFILE e você pode usar as outras abas.</p>';
     if (!await ask({ title: "Aplicar " + verb + " em " + R.ne + "?", html: html, ok: "Aplicar " + verb })) return;
     var steps = [{ cmd: c.main, label: verb, long: true }];
     if (auto) {
@@ -567,7 +598,7 @@
   function fsBody() {
     var proto = $("cfProto").value;
     return { host: need($("cfHost").value.trim(), "Servidor (upload)"), protocol: proto, port: parseInt($("cfPort").value, 10) || (proto === "FTP" ? 21 : 22),
-      user: need($("cfUser").value.trim(), "Usuário do servidor de arquivos"), pwd: need($("cfPwd").value, "Senha do servidor de arquivos"), dir: need($("cfDir").value.trim(), "Diretório remoto") };
+      user: need($("cfUser").value.trim(), "Usuário do servidor de arquivos"), pwd: pwOf("cfPwd", "servidor de arquivos"), dir: need($("cfDir").value.trim(), "Diretório remoto") };
   }
   function nameOk(n) {
     if (!n) throw new Error("Informe o nome remoto do arquivo.");
@@ -586,11 +617,34 @@
     gate();
   }
   $("cfProto").addEventListener("change", function () { $("cfPort").value = this.value === "FTP" ? 21 : 22; save(); });
-  $("cfFile").addEventListener("change", function () {
-    var f = this.files[0];
-    $("cfFileInfo").textContent = f ? fmtBytes(f.size) : "";
-    if (f) $("cfName").value = f.name;
+  var selFile = null;
+  function pickFile(f) {
+    if (!f) return;
+    if (!/\.xml$/i.test(f.name)) { tell("Arquivo não aceito", "Somente arquivos .xml (recebido: " + f.name + ")."); return; }
+    if (!f.size) { tell("Arquivo vazio", f.name + " está vazio."); return; }
+    selFile = f;
+    $("cfDrop").classList.add("has");
+    $("cfDropName").textContent = f.name;
+    $("cfFileInfo").textContent = fmtBytes(f.size) + " · clique ou arraste outro para trocar";
+    $("cfName").value = f.name;
     invalidate("(arquivo trocado)");
+  }
+  $("cfFile").addEventListener("change", function () { pickFile(this.files[0]); this.value = ""; });
+  $("cfDrop").addEventListener("click", function () { $("cfFile").click(); });
+  $("cfDrop").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("cfFile").click(); } });
+  ["dragenter", "dragover"].forEach(function (t) {
+    $("cfDrop").addEventListener(t, function (e) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; this.classList.add("over"); });
+  });
+  ["dragleave", "dragend"].forEach(function (t) { $("cfDrop").addEventListener(t, function () { this.classList.remove("over"); }); });
+  $("cfDrop").addEventListener("drop", function (e) {
+    e.preventDefault(); this.classList.remove("over");
+    var fl = e.dataTransfer && e.dataTransfer.files;
+    if (fl && fl.length > 1) { tell("Um arquivo por vez", "Arraste só um arquivo XML."); return; }
+    pickFile(fl && fl[0]);
+  });
+  // soltar o arquivo fora da área não deve fazer o navegador abrir o XML e sair da página
+  ["dragover", "drop"].forEach(function (t) {
+    pane.addEventListener(t, function (e) { if (!$("cfDrop").contains(e.target) && e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], "Files") >= 0) { e.preventDefault(); if (t === "dragover") e.dataTransfer.dropEffect = "none"; } });
   });
   $("cfName").addEventListener("input", function () { invalidate("(nome remoto alterado)"); });
   ["cfHost", "cfDir"].forEach(function (i) { $(i).addEventListener("input", function () { invalidate("(servidor ou diretório alterado)"); }); });
@@ -605,11 +659,11 @@
     if (r.status !== 200) { e.state = "failed"; e.summary = errMsg(r); drawLogs(); $("cfOut").innerHTML = '<div class="sw-warn">✖ ' + esc(errMsg(r)) + '</div>'; return; }
     var j = r.j;
     e.state = j.ok ? "done" : "failed"; e.summary = j.results.map(function (x) { return x.protocol + ":" + x.port + " " + (x.login ? "OK" : x.tcp ? "login recusado" : "sem resposta"); }).join(" · "); drawLogs();
-    var h = '<table class="sw-t"><thead><tr><th>Protocolo</th><th>Porta</th><th>Porta aberta</th><th>Login</th><th>Diretório</th><th>Detalhe</th></tr></thead><tbody>' +
+    var h = '<div style="overflow:auto"><table class="sw-t"><thead><tr><th>Protocolo</th><th>Porta</th><th>Porta aberta</th><th>Login</th><th>Diretório</th><th>Detalhe</th></tr></thead><tbody>' +
       j.results.map(function (x) {
         return '<tr><td>' + x.protocol + '</td><td>' + x.port + '</td><td>' + (x.tcp ? chip("c-ok", "sim") : chip("c-er", "não")) + '</td><td>' + (x.login ? chip("c-ok", "OK") : chip(x.tcp ? "c-er" : "c-no", x.tcp ? "recusado" : "—")) + '</td><td>' +
           (x.dirOk == null ? chip("c-no", "—") : x.dirOk ? chip("c-ok", "OK") : chip("c-er", "não abriu")) + '</td><td>' + esc(x.message) + '</td></tr>';
-      }).join("") + '</tbody></table>';
+      }).join("") + '</tbody></table></div>';
     if (j.best && (j.best.protocol !== b.protocol || j.best.port !== b.port)) {
       $("cfProto").value = j.best.protocol; $("cfPort").value = j.best.port; save();
       h += '<div class="sw-warn">Quem respondeu foi <b>' + j.best.protocol + ' na porta ' + j.best.port + '</b>: já deixei essa opção selecionada.</div>';
@@ -653,8 +707,8 @@
   }
   $("cfSend").addEventListener("click", guard(async function () {
     ready();
-    var f = $("cfFile").files[0];
-    if (!f) throw new Error("Escolha o arquivo XML.");
+    var f = selFile;
+    if (!f) throw new Error("Escolha o arquivo XML (arraste para a área tracejada ou clique nela).");
     if (!/\.xml$/i.test(f.name)) throw new Error("Somente arquivos .xml são aceitos.");
     if (!f.size) throw new Error("O arquivo está vazio.");
     var b = fsBody(); b.name = nameOk($("cfName").value.trim());
@@ -687,8 +741,7 @@
 
   function cfgBuild(real) {
     if (!up) throw new Error("Envie o XML (ou escolha um já existente em “Listar diretório”) antes de gerar o comando.");
-    var pw = real ? ($("ccSame").checked ? $("cfPwd").value : $("ccPwd").value) : "********";
-    if (real) need(pw, $("ccSame").checked ? "Senha do servidor de arquivos (usada no comando)" : "PWD no comando");
+    var pw = real ? ($("ccSame").checked ? pwOf("cfPwd", "servidor de arquivos, usada no comando") : pwOf("ccPwd", "PWD no comando")) : "********";
     return 'DLD CFGFILE: MODE=IPV4, IP="' + need(clean($("ccIp").value, "IP no comando"), "IP no comando") + '", USR="' + need(clean($("ccUser").value, "USR no comando"), "USR no comando") +
       '", PWD="' + clean(pw, "PWD") + '", DIR="' + need(clean($("ccDir").value, "DIR no comando"), "DIR no comando") + '", FN="' + clean(up.fileName, "nome do arquivo") +
       '", ENCRYPTMODE=' + need(clean($("ccEnc").value, "ENCRYPTMODE"), "ENCRYPTMODE") + ', FOCDLD=' + $("ccFoc").value + ';';
@@ -742,11 +795,50 @@
     $("rsUp").innerHTML = chip("c-no", "não iniciado"); drawCfgRun(); gate();
   });
 
+  // ---------- senha padrão salva no helper ----------
+  var pwEdit = false;
+  function drawPw(warn) {
+    var st = $("swPwSt"), s = window.MAE.state(), can = s.online && !(s.version != null && s.version < MINV);
+    st.className = "sw-chip " + (!can ? "c-no" : savedPwd ? "c-ok" : "c-wt");
+    st.textContent = !can ? "precisa do helper atualizado" : savedPwd ? "✓ salva neste PC" : "não salva";
+    $("swPwSet").hidden = !can || (savedPwd && !pwEdit);
+    $("swPwChange").hidden = !can || !savedPwd || pwEdit;
+    $("swPwDel").hidden = !can || !savedPwd;
+    $("swPwNote").textContent = warn || "Fica guardada só no helper deste computador (protegida pelo Windows). Nunca aparece na tela nem vai para o GitHub.";
+    Array.prototype.forEach.call(pane.querySelectorAll("input.sw-pwf"), function (i) {
+      i.placeholder = savedPwd ? "•••••••• (senha salva)" : "digite nesta sessão";
+    });
+  }
+  function pwStatus() {
+    var s = window.MAE.state();
+    if (!s.online || (s.version != null && s.version < MINV)) { savedPwd = false; drawPw(); return; }
+    call("/").then(function (r) { if (r.status === 200) { savedPwd = !!r.j.savedPwd; drawPw(r.j.savedPwdWarn); } }).catch(function () {});
+  }
+  $("swPwSave").addEventListener("click", guard(async function () {
+    ready();
+    var v = $("swPwNew").value;
+    if (!v) throw new Error("Digite a senha padrão.");
+    if (/["\r\n;]/.test(v)) throw new Error("A senha não pode ter aspas, ponto e vírgula ou quebra de linha.");
+    var r = await call("/secret/set", { pwd: v });
+    $("swPwNew").value = "";
+    if (r.status !== 200) throw new Error(errMsg(r));
+    savedPwd = true; pwEdit = false; drawPw(r.j.persisted ? "" : r.j.message);
+    addLog({ op: "Senha padrão", state: "done", summary: r.j.persisted ? "salva neste PC" : r.j.message });
+  }));
+  $("swPwNew").addEventListener("keydown", function (e) { if (e.key === "Enter") $("swPwSave").click(); });
+  $("swPwChange").addEventListener("click", function () { pwEdit = true; drawPw(); $("swPwNew").focus(); });
+  $("swPwDel").addEventListener("click", function () {
+    ask({ title: "Apagar a senha salva?", html: "<p>A senha padrão será removida deste PC. Depois será preciso digitar de novo.</p>", ok: "Apagar", danger: true }).then(function (y) {
+      if (!y) return;
+      call("/secret/clear", {}).then(function () { savedPwd = false; pwEdit = false; drawPw(); addLog({ op: "Senha padrão", state: "canceled", summary: "apagada deste PC" }); }).catch(function (e) { tell("Erro", e.message); });
+    });
+  });
+
   // ---------- início ----------
-  applyProf(); gate(); conn();
+  applyProf(); gate(); conn(); drawPw(); pwStatus();
   if (!ne() && loadedSite()) $("swNe").value = loadedSite();
   var tab = $("tab-sw");
   if (tab) tab.addEventListener("click", function () { conn(); fillNe(); reattach(); if (!ne() && loadedSite()) { $("swNe").value = loadedSite(); refreshPrev(); } });
-  setInterval(function () { conn(); reattach(); }, 3000);
+  setInterval(function () { conn(); reattach(); if (!pwEdit) pwStatus(); }, 3000);
   window.SW_TAB = { jobs: function () { return jobs; }, logs: function () { return logs; } };
 })();

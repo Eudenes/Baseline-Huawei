@@ -10,6 +10,7 @@
 #        (/pm/fetch, /pm/progress, /pm/abort) + aba 9 "SW & CFGFILE":
 #        /job/*          comandos demorados (DLD/ACT/SPL) em segundo plano, com percentual
 #        /file-server/*  teste, listagem e upload de XML no servidor de arquivos (FTP ou SFTP)
+# v3.3 = /secret/set e /secret/clear: senha padrao guardada neste PC (DPAPI no Windows)
 import argparse, base64, datetime as dt, gzip, io, json, os, re, socket, stat, sys, threading, time
 from urllib.parse import urlparse, parse_qs
 import xml.etree.ElementTree as ET
@@ -19,7 +20,7 @@ MAE_IP, MAE_PORT = os.environ.get("MAE_IP", "10.220.30.9"), int(os.environ.get("
 EOL = b"\r\n"
 LOCAL_PORT = 8765
 END = "---    END"
-VERSION = "3.2"
+VERSION = "3.3"
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(HERE, "helper.log")
 PM_ROOT = "/opt/oss/server/var/fileint/pmneexport"
@@ -512,6 +513,77 @@ def pm_fetch(sf, sites, d_from, d_to, sub, prog):
     return rows
 
 
+# ======================= Senha padrao guardada neste PC =======================
+# A pagina nunca recebe esta senha de volta: ela manda o marcador SAVED_TOKEN no lugar
+# da senha e o helper troca pelo valor real so na hora de falar com o site / servidor.
+# No Windows o arquivo e cifrado com DPAPI (so o mesmo usuario do Windows consegue abrir).
+SAVED_TOKEN = "__SENHA_SALVA__"
+SECRET_FILE = os.path.join(HERE, "senha_padrao.dat")
+SAVED = {"pwd": None, "warn": ""}
+
+
+def _dpapi(data, protect):
+    import ctypes
+    from ctypes import wintypes as w
+
+    class BLOB(ctypes.Structure):
+        _fields_ = [("cbData", w.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+    buf = ctypes.create_string_buffer(data, len(data))
+    src, dst = BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), BLOB()
+    fn = ctypes.windll.crypt32.CryptProtectData if protect else ctypes.windll.crypt32.CryptUnprotectData
+    if not fn(ctypes.byref(src), None, None, None, None, 0, ctypes.byref(dst)):
+        raise OSError("DPAPI recusou (%d)" % ctypes.GetLastError())
+    try:
+        return ctypes.string_at(dst.pbData, dst.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(ctypes.cast(dst.pbData, ctypes.c_void_p))
+
+
+def secret_load():
+    try:
+        with open(SECRET_FILE, "rb") as f: raw = f.read()
+    except OSError:
+        return
+    try:
+        head, _, body = raw.partition(b":")
+        if head == b"dpapi": SAVED["pwd"] = _dpapi(base64.b64decode(body), False).decode("utf-8")
+        elif head == b"b64": SAVED["pwd"] = base64.b64decode(body).decode("utf-8")
+    except Exception as e:
+        SAVED["warn"] = "nao consegui abrir a senha salva (%s): salve de novo" % e.__class__.__name__
+
+
+def secret_save(pwd):
+    pwd = str(pwd or "")
+    if not pwd or SAVED_TOKEN in pwd or any(ord(c) < 32 for c in pwd) or '"' in pwd:
+        raise ApiError(400, "bad_pwd", "senha invalida (vazia, com aspas ou caracteres de controle)")
+    SAVED["pwd"], SAVED["warn"] = pwd, ""
+    try:
+        data = b"dpapi:" + base64.b64encode(_dpapi(pwd.encode("utf-8"), True)) if os.name == "nt" else b"b64:" + base64.b64encode(pwd.encode("utf-8"))
+        fd = os.open(SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f: f.write(data)
+        return {"ok": True, "persisted": True, "message": "senha salva neste PC"}
+    except Exception as e:
+        SAVED["warn"] = "senha guardada so ate fechar o helper (%s)" % e.__class__.__name__
+        return {"ok": True, "persisted": False, "message": SAVED["warn"]}
+
+
+def secret_clear():
+    SAVED["pwd"], SAVED["warn"] = None, ""
+    try: os.remove(SECRET_FILE)
+    except OSError: pass
+    return {"ok": True}
+
+
+def use_saved(text):
+    """Troca o marcador pela senha salva (so no momento do envio)."""
+    if SAVED_TOKEN not in (text or ""): return text
+    if not SAVED["pwd"]: raise ApiError(409, "no_saved_pwd", "nao ha senha salva neste PC: salve no topo da aba SW & CFGFILE")
+    return text.replace(SAVED_TOKEN, SAVED["pwd"])
+
+
+secret_load()
+
+
 # ======================= Erros com codigo HTTP (sem stack trace na pagina) =======================
 class ApiError(Exception):
     def __init__(self, http, code, message, **extra):
@@ -566,6 +638,7 @@ class Job:
                                "quiet": max(1, min(int(s.get("quiet") or 20), 600)),
                                "state": "pending", "pct": None, "ok": None, "msg": "", "resp": "", "t0": 0, "t1": 0})
         if not self.steps: raise ApiError(400, "no_steps", "nenhum comando para executar")
+        for s in self.steps: use_saved(s["cmd"])            # sem senha salva: recusa ja na partida
         self.state, self.note, self.abort, self.cur = "queued", "", False, -1
         self.created, self.ended = time.time(), 0
         self.user, self.pwd = mml.user, mml.pwd
@@ -600,7 +673,7 @@ class Job:
             except (ValueError, IndexError): pass
 
     def _one(self, m, s):
-        line = s["cmd"]
+        line = use_saved(s["cmd"])
         if line.upper().startswith("#WAIT"):
             n = int(line.split()[1])
             for _ in range(n):
@@ -814,7 +887,7 @@ def fs_params(b):
     if proto not in ("FTP", "SFTP"): raise ApiError(400, "bad_protocol", "protocolo deve ser FTP ou SFTP")
     port = int(b.get("port") or (21 if proto == "FTP" else 22))
     if not 0 < port < 65536: raise ApiError(400, "bad_port", "porta invalida")
-    user, pwd = str(b.get("user") or ""), str(b.get("pwd") or "")
+    user, pwd = str(b.get("user") or ""), use_saved(str(b.get("pwd") or ""))
     if not user or not pwd: raise ApiError(400, "no_cred", "informe usuario e senha do servidor de arquivos")
     return host, proto, port, user, pwd
 
@@ -958,7 +1031,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(PROG)
             self._json({"status": "ok", "version": VERSION, "logged": bool(mml.user), "user": mml.user, "mae": f"{MAE_IP}:{MAE_PORT}",
                         "sftp": {"logged": bool(sftp.sftp), "user": sftp.user}, "pmRoot": PM_ROOT,
-                        "jobs": sum(1 for j in JOBS.values() if j.state in ("queued", "running"))})
+                        "jobs": sum(1 for j in JOBS.values() if j.state in ("queued", "running")),
+                        "savedPwd": bool(SAVED["pwd"]), "savedPwdWarn": SAVED["warn"]})
         except ApiError as e:
             self._json(e.payload, e.http)
         except Exception as e:
@@ -990,6 +1064,8 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/job/stop":
                 j = job_get(body.get("id", "")); j.abort = True
                 return self._json({"ok": True, "id": j.id})
+            if p == "/secret/set": return self._json(secret_save(body.get("pwd")))
+            if p == "/secret/clear": return self._json(secret_clear())
             if p == "/file-server/test": return self._json(fs_test(body))
             if p == "/file-server/list": return self._json(fs_list(body))
             if p == "/file-server/upload":
