@@ -541,7 +541,8 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
   const senhaCorreta = "admin"; // 🔒 troque pela senha que quiser
   const senhaDigitada = prompt("Digite a palavra-chave para acessar o site:");
 
-  if (senhaDigitada !== senhaCorreta) {
+  // celular coloca a 1a letra em maiuscula e as vezes um espaco no fim: ignora os dois
+  if (String(senhaDigitada || "").trim().toLowerCase() !== senhaCorreta.toLowerCase()) {
     alert("Senha incorreta. Acesso negado.");
     document.body.innerHTML = ""; // limpa a página
     window.location.href = "https://google.com"; // opcional: redireciona
