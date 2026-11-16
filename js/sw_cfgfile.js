@@ -1,6 +1,10 @@
-/* sw_cfgfile.js — aba "SW & CFGFILE" (2ª aba) do Baseline Huawei.
-   · Software : gera DLD / ACT / SPL SOFTWARE por perfil e aplica no site.
+/* sw_cfgfile.js — aba "BKP, CFGFILE e SW" (2ª aba) do Baseline Huawei.
+   · Software : mostra o software ativo (LST SOFTWARE) e gera DLD / ACT / SPL SOFTWARE por perfil.
    · CFGFILE  : envia um XML ao servidor de arquivos (pelo helper) e manda a BBU executar DLD CFGFILE.
+   · BKP      : coleta os logs (TXT) e o backup XML (BKP + ULD CFGFILE), renomeia com o nome do site
+                e grava na pasta do OneDrive sincronizada neste PC (subpasta com o nome do site).
+   Todo comando em que o site usa FTP/SFTP (DLD/SPL/ULD) vai precedido de SET FTPSCLT:ENCRYMODE=Plaintext;
+   DLD/ACT/BKP só contam como concluídos quando o site reporta "Status = Success" (helper v3.4+).
    · Status e logs: acompanhamento, histórico da sessão e ajustes de espera.
    Usa a conexão do painel "Executar no MAE" (mae_bridge.js) e o helper v3.2+ (rotas /job/* e /file-server/*).
    Os comandos demorados rodam em segundo plano no helper: a página só consulta o andamento, então
@@ -17,7 +21,7 @@
   if (!pane) return;
   if (!window.MAE) { pane.innerHTML = '<p class="muted" style="padding:20px">Painel do MAE (mae_bridge.js) não carregado.</p>'; return; }
 
-  var HELPER = "http://127.0.0.1:8765", MINV = 3.3, LS_KEY = "swCfgV2";
+  var HELPER = "http://127.0.0.1:8765", MINV = 3.4, LS_KEY = "swCfgV2";
   var SAVED = "__SENHA_SALVA__", savedPwd = false;
   var MASK = 'PWD="********"';
   var mask = function (s) { return String(s || "").replace(/PWD\s*=\s*"[^"]*"/gi, MASK); };
@@ -32,6 +36,30 @@
     bls:     { name: "BLS software", kind: "dld", sv: "BTS3900_5900 BLS V100R020C10SPC270", swt: "EXTSW", atl: "" },
     custom:  { name: "Personalizado", kind: "dld", sv: "", swt: "SOFTWARE", atl: "" }
   };
+
+  var FTPS = "SET FTPSCLT:ENCRYMODE=Plaintext;";       // sempre antes de comando que faz o site usar FTP/SFTP
+  var FTPS_STEP = function () { return { cmd: FTPS, label: "SET FTPSCLT" }; };
+
+  // ---------- listas de comandos do BKP (logs) — escolhidas pelo Product Type do LST NODE ----------
+  var LISTS = {
+    SRAN: ["LST ALMAF:;", "LST ALMLOG:ALMTP=ALL;", "LST RETPORT:;", "DSP RETPORT:;", "DSP RETSUBUNIT:;", "DSP RETDEVICEDATA:;",
+      "DSP GLOCELL:;", "LST GLOCELL:;", "LST GTRX:;", "DSP GTRX:;", "DSP CELL:;", "LST CELL:;", "LST ULOCELL:MODE=ALLLOCALCELL;", "DSP ULOCELL:;",
+      "LST NRCELL:;", "DSP NRCELL:;", "DSP BRD:;", "DSP CELLUECNT:;", "DSP NRCELLUENUMBER:;", "LST RRU:;", "DSP RRU:;", "LST RRUCHAIN:;", "DSP RRUCHAIN:;",
+      "LST SECTOR:;", "DSP SECTOR:;", "LST SECTOREQM:;", "DSP VSWR:;", "DSP SFP:;", "DSP CPRIPORT:;", "DSP CLKSTAT:SN=7;", "LST CNOPERATORTA:;",
+      "LST CNOPERATOR:;", "LST ENODEBFUNCTION:;", "LST DEVIP:;", "LST VLANMAP:;", "DSP IPRT:;", "LST OMCH:;", "LST TWAMPRESPONDER:;", "LST SCTPHOST:;",
+      "LST USERPLANEHOST:;", "LST CLKSYNCMODE:;", "DSP CLKSTAT:SRN=0,SN=7;", "DSP SYSCLKSRC:;", "LST CLKMODE:;", "DSP CLKSRC:;", "LST GNSS:;", "DSP GNSS:;",
+      "DSP CLKRECORD:SRN=0,SN=7;", "LST ALMPORT:CT=ALL;", "LST NODE:;", "LST NE:;"],
+    LTE: ["LST ALMAF:;", "LST ALMLOG:ALMTP=ALL;", "DSP RETSUBUNIT:;", "DSP RETDEVICEDATA:;", "DSP RETPORT:;", "DSP CELL:;", "LST CELL:;", "DSP BRD:;",
+      "DSP CELLUECNT:;", "LST RRU:;", "DSP RRU:;", "LST RRUCHAIN:;", "DSP RRUCHAIN:;", "DSP VSWR:;", "DSP CPRIPORT:;", "DSP CLKSTAT:SN=7;", "LST ETHPORT:;",
+      "LST DEVIP:;", "LST VLANMAP:;", "DSP IPRT:;", "LST OMCH:;", "LST TWAMPRESPONDER:;", "LST SCTPHOST:;", "LST USERPLANEHOST:;", "DSP SYSCLKSRC:;",
+      "LST CLKMODE:;", "DSP CLKSRC:;", "DSP GNSS:;", "LST ALMPORT:CT=ALL;", "LST NODE:;", "LST NE:;"],
+    WCDMA: ["LST ALMAF:;", "LST ALMLOG:ALMTP=ALL;", "LST ULOCELL:MODE=ALLLOCALCELL;", "LST RETPORT:;", "DSP RETPORT:;", "DSP RETSUBUNIT:;",
+      "DSP RETDEVICEDATA:;", "DSP BRD:;", "DSP ULOCELL:;", "DSP VSWR:;", "LST RRU:;", "DSP RRU:;", "LST RRUCHAIN:;", "DSP RRUCHAIN:;", "LST SECTOR:;",
+      "DSP SECTOR:;", "LST SECTOREQM:;", "DSP CPRIPORT:;", "LST DEVIP:;", "LST VLANMAP:;", "DSP IPRT:;", "LST OMCH:;", "LST TWAMPRESPONDER:;",
+      "DSP SYSCLKSRC:;", "LST CLKMODE:;", "DSP CLKSRC:;", "DSP GNSS:;", "LST GNSS:;", "LST ALMPORT:CT=ALL;", "LST NODE:;", "LST NE:;",
+      "DSP CLKRECORD:SRN=0,SN=7;", "LST IPCLKLINK:;"]
+  };
+  var ONEDRIVE_2026 = "https://telebitbr-my.sharepoint.com/:f:/g/personal/renato_barros_telebitbrasil_com/IgDD2Xqrm3M7TJ9HVoU8jR7ZAbbwdnHHmE5N3z3P5FqHC9A?e=1bSC7s";
 
   // ---------- estilo ----------
   var st = document.createElement("style");
@@ -102,7 +130,13 @@
     "#swOv .bt{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}",
     "#swOv button{font-family:'Segoe UI',Arial,sans-serif;font-weight:600;font-size:13.5px;border-radius:6px;padding:9px 18px;cursor:pointer;border:1px solid #dfe3eb;background:#fff;color:#1d2433}",
     "#swOv button.ok{background:#16613a;border-color:#16613a;color:#fff}#swOv button.ok.dan{background:#c7000b;border-color:#c7000b}",
-    "#swOv button:disabled{opacity:.45;cursor:not-allowed}"
+    "#swOv button:disabled{opacity:.45;cursor:not-allowed}",
+    "#pane-sw .ls-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px;margin-top:6px}",
+    "#pane-sw .ls-grid h4{margin:6px 0 0;font-size:13px;color:var(--text-muted)}",
+    "#pane-sw table.sw-t tr.act td{background:#e3f6ea}",
+    "#pane-sw .bk-files{display:flex;flex-direction:column;gap:6px;margin-top:10px}",
+    "#pane-sw .bk-files div{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px}",
+    "#pane-sw pre.bk-l{font:12px/1.45 Consolas,'Courier New',monospace;background:var(--surface-alt);border:1px solid var(--border);border-radius:6px;padding:8px 10px;max-height:220px;overflow:auto;margin:6px 0 0;white-space:pre-wrap}"
   ].join("\n");
   document.head.appendChild(st);
 
@@ -129,13 +163,14 @@
     '<div class="sw-warn" id="swOld" hidden>⚠ O helper deste PC é antigo e não tem as funções desta aba. <a id="swInst" download="Instalar_Helper_MML.bat" href="tools/Instalar_Helper_MML.bat"><b>Baixar o instalador atualizado</b></a>, abrir o arquivo e aguardar o “PRONTO”.</div>' +
     '<div id="swJobs"></div>' +
     '<nav class="sw-sub" role="tablist">' +
-      '<button type="button" role="tab" id="swT-cfg" aria-selected="true">CFGFILE</button>' +
-      '<button type="button" role="tab" id="swT-sw" aria-selected="false">Software</button>' +
+      '<button type="button" role="tab" id="swT-sw" aria-selected="true">Software</button>' +
+      '<button type="button" role="tab" id="swT-cfg" aria-selected="false">CFGFILE</button>' +
+      '<button type="button" role="tab" id="swT-bkp" aria-selected="false">BKP</button>' +
       '<button type="button" role="tab" id="swT-log" aria-selected="false">Status e logs <span class="sw-chip c-no" id="swLogN">0</span></button>' +
     '</nav>' +
 
     // ===== CFGFILE =====
-    '<div id="swP-cfg"><div class="sw-grid">' +
+    '<div id="swP-cfg" hidden><div class="sw-grid">' +
       '<section class="step"><div class="step-head"><span class="step-num">1</span><h2>Enviar o XML ao servidor de arquivos</h2></div>' +
         '<p class="instr">O arquivo sai deste PC, passa pelo helper e é gravado na pasta do servidor.</p>' +
         '<div class="sw-drop" id="cfDrop" tabindex="0" role="button" aria-label="Escolher ou arrastar o arquivo XML">' +
@@ -188,7 +223,13 @@
     '</div></div>' +
 
     // ===== Software =====
-    '<div id="swP-sw" hidden><div class="sw-grid">' +
+    '<div id="swP-sw"><div class="sw-grid">' +
+      '<section class="step" style="grid-column:1/-1"><div class="step-head"><h2>Software ativo no site</h2> <span class="sw-chip c-no" id="lsSt">não consultado</span></div>' +
+        '<p class="instr">Resultado do <b>LST SOFTWARE:;</b> — a <b>Main Area</b> é o que está rodando no site. É consultado sozinho quando o site é carregado.</p>' +
+        '<div id="lsOut"></div>' +
+        '<div class="row"><button class="ghost" type="button" id="lsRun">Atualizar (LST SOFTWARE)</button></div>' +
+        '<details><summary>Resposta completa</summary><div class="sw-cmd resp" id="lsRaw">—</div></details>' +
+      '</section>' +
       '<section class="step"><div class="step-head"><span class="step-num">1</span><h2>Escolher a versão</h2></div>' +
         '<p class="instr">Os pacotes já estão no servidor; aqui só é gerado o comando para o site buscar.</p>' +
         '<div class="sw-f">' +
@@ -201,6 +242,7 @@
         '</div>' +
         '<label class="chk" id="swAutoL"><input type="checkbox" id="swAuto"> Executar <b>ACT SOFTWARE</b> automaticamente ao fim do download (o site reinicia)</label>' +
         '<p class="sw-note" id="swProfNote"></p>' +
+        '<p class="sw-note" id="swActNote"></p>' +
       '</section>' +
       '<section class="step"><div class="step-head"><span class="step-num">2</span><h2>Comando e aplicação</h2></div>' +
         '<p class="instr">A senha aparece mascarada aqui e nos logs; a real só vai no envio ao site.</p>' +
@@ -211,8 +253,53 @@
           '<button class="ghost" type="button" id="swCopy">Copiar comando</button>' +
           '<button class="ghost" type="button" id="swStatus">Verificar status agora</button>' +
         '</div>' +
-        '<p class="sw-note">O andamento (percentual) aparece no topo desta aba e no botão “SW &amp; CFGFILE”. Você pode trocar de aba enquanto o site baixa.</p>' +
+        '<p class="sw-note">Antes do DLD/SPL vai sempre o <b>SET FTPSCLT:ENCRYMODE=Plaintext;</b>. O download só fica 100% quando o site reporta <b>Status = Success</b>. O andamento aparece no topo desta aba e no botão “BKP, CFGFILE e SW”; dá para trocar de aba enquanto o site baixa.</p>' +
         '<div class="sw-cmd resp" id="swStOut" hidden></div>' +
+      '</section>' +
+    '</div></div>' +
+
+    // ===== BKP =====
+    '<div id="swP-bkp" hidden><div class="sw-grid">' +
+      '<section class="step"><div class="step-head"><span class="step-num">1</span><h2>O que salvar</h2></div>' +
+        '<label class="chk"><input type="checkbox" id="bkLogs" checked> <b>Logs</b> — TXT com a resposta de todos os comandos da lista</label>' +
+        '<label class="chk"><input type="checkbox" id="bkXml" checked> <b>Backup XML</b> — BKP CFGFILE + ULD CFGFILE (renomeado com o nome do site)</label>' +
+        '<div class="sw-f">' +
+          '<label class="w2">Lista de comandos<select id="bkKind"><option value="AUTO">Automático (pelo Product Type do LST NODE)</option><option>SRAN</option><option>LTE</option><option>WCDMA</option></select></label>' +
+          fld("Rótulo do backup BL (opcional)", "bkBl", 'type="text" class="mono" placeholder="vazio = não envia"') +
+        '</div>' +
+        '<p class="sw-note">Automático: Product Type com <b>WCDMA</b> → lista WCDMA; com <b>LTE</b> → lista LTE; nos outros casos (ex.: BTS3900) → lista <b>SRAN</b>.</p>' +
+        '<details><summary>Ver as listas de comandos</summary>' +
+          '<div class="ls-grid">' + ["SRAN", "LTE", "WCDMA"].map(function (k) { return '<div><h4>' + k + ' · ' + LISTS[k].length + ' comandos</h4><pre class="bk-l">' + esc(LISTS[k].join("\n")) + '</pre></div>'; }).join("") + '</div>' +
+        '</details>' +
+      '</section>' +
+      '<section class="step"><div class="step-head"><span class="step-num">2</span><h2>Servidor onde o site deixa o XML</h2></div>' +
+        '<div class="sw-f">' +
+          fld("IP no comando (visto pelo site)", "bkIp", 'type="text" class="mono"') +
+          fld("USR no comando", "bkUsr") +
+          fld("Diretório (DIR)", "bkDir", 'type="text" class="mono"', "w2") +
+          fld("Servidor visto deste PC", "bkHost", 'type="text" class="mono"') +
+          '<label>Protocolo<select id="bkProto"><option>FTP</option><option>SFTP</option></select></label>' +
+          fld("Porta", "bkPort", 'type="number" min="1" max="65535"') +
+          fld("Usuário (deste PC)", "bkFsUser") +
+          pwd("Senha (comando e servidor)", "bkPwd") +
+        '</div>' +
+        '<p class="sw-note">Depois do ULD, o arquivo no servidor é renomeado com o nome do site (ex.: <span class="mono">SR-PARO10_CFGDATA.XML</span>). Se já existir, entra a data/hora no nome.</p>' +
+      '</section>' +
+      '<section class="step" style="grid-column:1/-1"><div class="step-head"><span class="step-num">3</span><h2>Pasta 2026 do OneDrive (neste PC)</h2></div>' +
+        '<p class="instr">Os arquivos vão para <b>&lt;pasta&gt;\\&lt;nome do site&gt;\\</b> e o OneDrive deste PC sobe para a pasta da empresa. ' +
+          'Uma vez em cada PC: abra a <a href="' + ONEDRIVE_2026 + '" target="_blank" rel="noopener">pasta 2026</a> no navegador → <b>Adicionar atalho a Meus arquivos</b>; ela aparece no Explorador dentro do OneDrive da empresa.</p>' +
+        '<div class="sw-f">' + fld("Pasta local (ex.: C:\\Users\\voce\\OneDrive - TELEBIT\\2026)", "bkDest", 'type="text" class="mono"', "wf") + '</div>' +
+        '<div class="row"><button class="ghost" type="button" id="bkFind">Procurar a pasta 2026 no OneDrive</button><button class="ghost" type="button" id="bkTest">Testar pasta</button></div>' +
+        '<div id="bkDestOut"></div>' +
+        '<p class="sw-note">Pasta vazia: no fim os arquivos são baixados pelo navegador (aí é só arrastar para o OneDrive).</p>' +
+      '</section>' +
+      '<section class="step" style="grid-column:1/-1"><div class="step-head"><span class="step-num">4</span><h2>Executar o backup</h2></div>' +
+        '<div class="sw-cmd" id="bkPrev"></div>' +
+        '<div class="row"><button class="primary" type="button" id="bkRun">▶ Fazer backup</button></div>' +
+        '<div class="sw-res">' +
+          '<span>Execução</span><div id="bkSt"><span class="sw-chip c-no">não iniciado</span></div>' +
+          '<span>Arquivos</span><div id="bkFiles">—</div>' +
+        '</div>' +
       '</section>' +
     '</div></div>' +
 
@@ -234,7 +321,7 @@
           fld("Expressão de FALHA (opcional)", "stFail", 'type="text" class="mono" placeholder="vazio = não usa"') +
           fld("Antes do ACT automático, esperar até (opcional)", "stUntil", 'type="text" class="mono" placeholder="DSP SOFTSTATUS:; | texto esperado"', "wf") +
         '</div>' +
-        '<p class="sw-note">O download termina quando o site para de mandar relatórios “To be continued” <b>e</b> fica em silêncio pelo tempo acima. Qualquer RETCODE diferente de 0 encerra como falha.</p>' +
+        '<p class="sw-note"><b>DLD SOFTWARE, ACT SOFTWARE e BKP CFGFILE</b> só terminam quando o site reporta <b>Status = Success</b> (Progress 100% sozinho não basta). Nos demais (DLD/ACT CFGFILE, SPL, ULD): se o site mandar relatórios de progresso, também esperam o Success; se não mandar, terminam após o silêncio acima. Qualquer RETCODE diferente de 0 encerra como falha.</p>' +
       '</section>' +
     '</div></div>';
 
@@ -242,9 +329,12 @@
   var DEF = { cfHost: "10.220.30.9", cfProto: "SFTP", cfPort: "22", cfUser: "ftpuser", cfDir: "/ftproot/ronaldinho",
     ccIp: "10.220.4.134", ccUser: "ftpuser", ccDir: "/ftproot/ronaldinho", ccEnc: "UNENCRYPTED", ccFoc: "TRUE",
     swIp: "10.220.4.134", swUser: "neftpuser",
-    stCmd: "DSP SOFTSTATUS:;", stPct: "(\\d{1,3})\\s*%", stQuiet: "20", stMax: "120", stDone: "", stFail: "", stUntil: "" };
+    bkIp: "10.220.4.134", bkUsr: "ftpuser", bkDir: "/ftproot/ronaldinho/BKP/", bkHost: "10.220.30.9", bkProto: "SFTP", bkPort: "22", bkFsUser: "ftpuser",
+    bkDest: "", bkKind: "AUTO",
+    stCmd: "DSP SOFTSTATUS:;", stPct: "Progress\\s*=\\s*(\\d{1,3})\\s*%", stQuiet: "20", stMax: "120", stDone: "", stFail: "", stUntil: "" };
   var saved = {};
   try { saved = JSON.parse(localStorage.getItem(LS_KEY) || "{}") || {}; } catch (e) {}
+  if (saved.stPct === "(\\d{1,3})\\s*%") delete saved.stPct;        // padrão antigo: pegava o eco %%CMD%% como percentual
   Object.keys(DEF).forEach(function (k) {
     $(k).value = saved[k] != null ? saved[k] : DEF[k];
     $(k).addEventListener("change", save);
@@ -314,7 +404,7 @@
 
   // ---------- site / conexão ----------
   function ne() { return $("swNe").value.trim(); }
-  function loadedSite() { return (($("neLbl") && $("neLbl").textContent) || "").trim(); }
+  function loadedSite() { return (($("neLbl") && $("neLbl").textContent) || "").split("·")[0].trim(); }
   function fillNe() {
     $("swNeList").innerHTML = (window.MAE.neList() || []).map(function (n) { return '<option value="' + esc(n.name) + '">' + esc(n.type + " · " + n.ip) + '</option>'; }).join("");
   }
@@ -356,9 +446,12 @@
   }
 
   // ---------- subabas ----------
-  ["cfg", "sw", "log"].forEach(function (k) {
+  var SUBS = ["sw", "cfg", "bkp", "log"];
+  SUBS.forEach(function (k) {
     $("swT-" + k).addEventListener("click", function () {
-      ["cfg", "sw", "log"].forEach(function (x) { $("swT-" + x).setAttribute("aria-selected", x === k ? "true" : "false"); $("swP-" + x).hidden = x !== k; });
+      SUBS.forEach(function (x) { $("swT-" + x).setAttribute("aria-selected", x === k ? "true" : "false"); $("swP-" + x).hidden = x !== k; });
+      if (k === "sw") lsAuto(ne());
+      if (k === "bkp") bkPrev();
     });
   });
 
@@ -382,14 +475,14 @@
   $("lgClear").addEventListener("click", function () { logs = logs.filter(function (e) { return e.state === "running" || e.state === "queued"; }); logs.forEach(function (e, i) { e.n = i; }); drawLogs(); });
   $("lgExport").addEventListener("click", function () {
     var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
-    var t = "SW & CFGFILE — log da sessão — " + d.toLocaleString() + "\r\n(senhas mascaradas)\r\n";
+    var t = "BKP, CFGFILE e SW — log da sessão — " + d.toLocaleString() + "\r\n(senhas mascaradas)\r\n";
     logs.forEach(function (e) {
       t += "\r\n==== " + e.ts + " | " + (e.ne || "-") + " | " + e.op + " | " + (ST[e.state] || ["", e.state])[1].toUpperCase() + "\r\nServidor: " + (e.server || "-") + "\r\nArquivo/versão: " + (e.item || "-") +
         "\r\nResumo: " + (e.summary || "") + (e.cmd ? "\r\nComando: " + mask(e.cmd).replace(/\n/g, "\r\n         ") : "") + (e.resp ? "\r\n--- resposta ---\r\n" + mask(e.resp).replace(/\r?\n/g, "\r\n") : "") + "\r\n";
     });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([t], { type: "text/plain;charset=utf-8" }));
-    a.download = "SW_CFGFILE_" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + ".txt";
+    a.download = "BKP_CFGFILE_SW_" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + ".txt";
     document.body.appendChild(a); a.click(); a.remove();
   });
 
@@ -421,7 +514,7 @@
     if (v.state === "done") return 100;
     var cur = v.steps[Math.max(0, v.cur)] || {}, n = v.steps.length;
     var base = Math.max(0, v.cur) / n;
-    return Math.round((base + ((cur.pct || 0) / 100) / n) * 100);
+    return Math.min(99, Math.floor((base + ((cur.pct || 0) / 100) / n) * 100));     // 100% só quando a tarefa termina
   }
   function upd(J) {
     var v = J.v, e = J.log;
@@ -431,6 +524,7 @@
     }).join(" · ");
     e.resp = v.steps.filter(function (x) { return x.resp; }).map(function (x) { return "### " + x.cmd + "\n" + x.resp; }).join("\n\n");
     if (J.kind === "cfg" && J === cfgJob) drawCfgRun();
+    if (J.kind === "bkp") { if (!bkJob || J.v.created >= bkJob.v.created) bkJob = J; if (J === bkJob) drawBkRun(); }
   }
   function drawJobs() {
     var ids = Object.keys(jobs).filter(function (id) { return !jobs[id].hide; }).sort(function (a, b) { return jobs[b].v.created - jobs[a].v.created; });
@@ -443,10 +537,11 @@
       return '<div class="sw-job ' + v.state + '" data-id="' + esc(id) + '"><h3>' + esc(v.title) + ' <span class="mono">' + esc(v.ne) + '</span> ' + stChip(v.state) +
         '<span class="muted" style="font-weight:400;font-size:12.5px">' + fmtSecs(el) + '</span><span class="sp"></span>' +
         (act ? '<button class="ghost" type="button" data-stop="' + esc(id) + '">Parar de aguardar</button>' : '<button class="ghost" type="button" data-hide="' + esc(id) + '">Fechar</button>') + '</h3>' +
-        '<div class="sw-bar"><i style="width:' + pct + '%"></i><b>' + (act && cur.pct == null && v.steps.length === 1 ? "aguardando percentual…" : pct + "%") + '</b></div>' +
+        '<div class="sw-bar"><i style="width:' + pct + '%"></i><b>' + (act && cur.pct == null && v.steps.length === 1 ? "aguardando percentual…" : pct + "%") +
+          (act && cur.need && cur.pct === 99 ? " · aguardando Status = Success" : "") + '</b></div>' +
         (v.note ? '<div class="sw-warn" style="margin:6px 0">' + esc(v.note) + '</div>' : '') +
         '<div class="sw-steps">' + v.steps.map(function (x) {
-          return '<div>' + stChip(x.state) + (x.state === "running" && x.pct != null ? '<b>' + x.pct + '%</b>' : '') + '<code>' + esc(x.cmd) + '</code>' + (x.msg ? '<span class="' + (x.ok ? "muted" : "") + '" style="' + (x.ok === false ? "color:#c7000b;font-weight:600" : "") + '">' + esc(x.msg) + '</span>' : '') + '</div>';
+          return '<div>' + stChip(x.state) + (x.state === "running" && x.pct != null ? '<b>' + x.pct + '%</b>' : '') + '<code>' + esc(x.cmd.charAt(0) === "#" && x.cmd.indexOf("#UNTIL") !== 0 ? x.label : x.cmd) + '</code>' + (x.msg ? '<span class="' + (x.ok ? "muted" : "") + '" style="' + (x.ok === false ? "color:#c7000b;font-weight:600" : "") + '">' + esc(x.msg) + '</span>' : '') + '</div>';
         }).join("") + '</div>' +
         '<details data-id="' + esc(id) + '"' + (open[id] ? " open" : "") + '><summary>Resposta do site (final)</summary><div class="sw-cmd resp">' + esc(v.steps.map(function (x) { return x.resp; }).filter(Boolean).join("\n\n").slice(-6000) || "—") + '</div></details></div>';
     }).join("");
@@ -534,9 +629,10 @@
     var t;
     try {
       var c = swCmds(swVals(false));
-      t = c.main + (c.act ? "\n" + ($("swAuto").checked ? "" : "// só se você mandar ativar:\n") + c.act : "");
+      t = FTPS + "\n" + c.main + (c.act ? "\n" + ($("swAuto").checked ? "" : "// só se você mandar ativar:\n") + c.act : "");
     } catch (e) { t = "⚠ " + e.message; }
     $("swPrev").textContent = t;
+    drawActNote();
     $("swApply").textContent = "▶ Aplicar " + (PROF[$("swProf").value].kind === "spl" ? "SPL" : "DLD" + ($("swAuto").checked ? " + ACT" : "")) + (ne() ? " em " + ne() : " no site");
   }
   ["swProf"].forEach(function (i) { $(i).addEventListener("change", applyProf); });
@@ -551,16 +647,16 @@
     var R = readyMml(), o = swVals(true); swCheck(o);
     var c = swCmds(o), auto = $("swAuto").checked && !!c.act, verb = o.kind === "spl" ? "SPL SOFTWARE" : "DLD SOFTWARE";
     var html = (R.known ? "" : '<div class="dg">' + esc(R.ne) + ' não está na lista de NEs do MAE.</div>') +
-      '<dl><dt>Site (NE)</dt><dd>' + esc(R.ne) + '</dd><dt>Versão</dt><dd>' + esc(o.sv) + '</dd><dt>Servidor</dt><dd>' + esc(o.ip) + '</dd></dl><pre>' + esc(mask(c.main)) + '</pre>' +
-      '<p>O download demora; o percentual aparece no topo da aba SW &amp; CFGFILE e você pode usar as outras abas.</p>';
+      '<dl><dt>Site (NE)</dt><dd>' + esc(R.ne) + '</dd><dt>Versão</dt><dd>' + esc(o.sv) + '</dd><dt>Servidor</dt><dd>' + esc(o.ip) + '</dd></dl><pre>' + esc(FTPS + "\n" + mask(c.main)) + '</pre>' +
+      '<p>O download demora; só conta como concluído quando o site reportar <b>Status = Success</b>. O andamento aparece no topo desta aba e você pode usar as outras abas.</p>';
     if (!await ask({ title: "Aplicar " + verb + " em " + R.ne + "?", html: html, ok: "Aplicar " + verb })) return;
-    var steps = [{ cmd: c.main, label: verb, long: true }];
+    var steps = [FTPS_STEP(), { cmd: c.main, label: verb, long: true, need: o.kind === "spl" ? "auto" : "success" }];
     if (auto) {
       var extra = " O ACT será enviado sozinho assim que o download terminar com sucesso.";
       if (!await ask({ title: "2ª confirmação — ACT automático em " + R.ne, html: actWarn(R.ne, o, c.act, extra), typed: "ATIVAR " + R.ne, ok: "Confirmar download + ACT", danger: true })) return;
       var u = $("stUntil").value.trim();
       if (u) { if (u.indexOf("|") < 0) throw new Error("O campo “esperar até” precisa do formato: COMANDO; | texto esperado"); steps.push({ cmd: "#UNTIL " + u, label: "Conferir fim do download", maxsec: 1800 }); }
-      steps.push({ cmd: c.act, label: "ACT SOFTWARE", long: true, maxsec: 1800 });
+      steps.push({ cmd: c.act, label: "ACT SOFTWARE", long: true, need: "success", maxsec: 1800 });
     }
     await startJob(R.ne, (o.kind === "spl" ? "Supply software" : "Download de software") + (auto ? " + ativação" : ""), steps, { kind: "sw", server: o.ip, item: o.sv }, "sw");
   }));
@@ -568,9 +664,90 @@
     var R = readyMml(), o = swVals(false); swCheck(o, true);
     var c = swCmds(o);
     if (!await ask({ title: "ACT SOFTWARE em " + R.ne, html: actWarn(R.ne, o, c.act), typed: "ATIVAR " + R.ne, ok: "Ativar agora", danger: true })) return;
-    await startJob(R.ne, "Ativação de software", [{ cmd: c.act, label: "ACT SOFTWARE", long: true, maxsec: 1800 }], { kind: "sw", item: o.sv }, "sw");
+    await startJob(R.ne, "Ativação de software", [{ cmd: c.act, label: "ACT SOFTWARE", long: true, need: "success", maxsec: 1800 }], { kind: "sw", item: o.sv }, "sw");
   }));
   $("swCopy").addEventListener("click", function () { copy($("swPrev").textContent.replace(/^\/\/.*\n/m, ""), this); });
+
+  // ---------- software ativo (LST SOFTWARE) ----------
+  var ls = { ne: "", rows: null, busy: false, want: "" };
+  function parseLstSoftware(t) {
+    var app = [], ext = [], sec = null;
+    String(t || "").split(/\r?\n/).forEach(function (ln) {
+      if (/Storage Area\s+Application Type/i.test(ln)) { sec = app; return; }
+      if (/Storage Area\s+Software Type/i.test(ln)) { sec = ext; return; }
+      if (!sec || !/^\s*(Main|Standby)\s+Area\s/i.test(ln)) { if (/^\s*\(Number of results/i.test(ln)) sec = null; return; }
+      var c = ln.trim().split(/\s{2,}/);
+      if (c.length >= 3) sec.push({ area: c[0], type: c[1], ver: c[2], st: c[3] || "", at: c[4] || "" });
+    });
+    return { app: app, ext: ext };
+  }
+  function lsTable(title, head, rows) {
+    return '<div><h4>' + esc(title) + '</h4>' + (rows.length ? '<table class="sw-t"><thead><tr><th>' + esc(head) + '</th><th>Software Version</th><th>Status</th><th>Activate Time</th></tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr class="' + (/^main/i.test(r.area) ? "act" : "") + '"><td>' + esc(r.type) + '</td><td class="m">' + esc(r.ver) + '</td><td>' + esc(r.st) + '</td><td>' + esc(r.at) + '</td></tr>'; }).join("") +
+      '</tbody></table>' : '<p class="muted" style="margin:6px 0">nenhuma linha</p>') + '</div>';
+  }
+  function drawLs() {
+    var d = ls.rows;
+    if (!d) { $("lsOut").innerHTML = ""; drawActNote(); return; }
+    var main = function (a) { return a.filter(function (r) { return /^main/i.test(r.area); }); };
+    var stb = d.app.filter(function (r) { return !/^main/i.test(r.area); }).concat(d.ext.filter(function (r) { return !/^main/i.test(r.area); }));
+    $("lsOut").innerHTML = '<div class="ls-grid">' + lsTable("Main Area — aplicação ativa (" + ls.ne + ")", "Application Type", main(d.app)) +
+      lsTable("Main Area — extensão / BLS", "Software Type", main(d.ext)) + '</div>' +
+      (stb.length ? '<details><summary>Standby Area (' + stb.length + ')</summary>' + lsTable("Standby Area", "Tipo", stb) + '</details>' : '');
+    drawActNote();
+  }
+  function activeVersions() {
+    if (!ls.rows || ls.ne.toUpperCase() !== ne().toUpperCase()) return null;
+    var pick = function (a) { return a.filter(function (r) { return /^main/i.test(r.area); }).map(function (r) { return r.ver; }); };
+    return { app: pick(ls.rows.app), ext: pick(ls.rows.ext) };
+  }
+  function drawActNote() {
+    var n = $("swActNote"); if (!n) return;
+    var a = activeVersions(), sv = $("swSv").value.trim(), ext = /EXTSW/i.test($("swSwt").value);
+    if (!a || !sv) { n.innerHTML = ""; return; }
+    var list = ext ? a.ext : a.app, on = list.indexOf(sv) >= 0;
+    n.innerHTML = on ? chip("c-ok", "já está ativo no site") + " " + esc(sv) + " está na Main Area de " + esc(ls.ne)
+      : chip("c-wt", "versão diferente da ativa") + " ativo hoje" + (ext ? " (BLS)" : "") + ": " + esc(list.filter(function (x, i) { return list.indexOf(x) === i; }).join(", ") || "—");
+  }
+  async function lsRun(neName) {
+    if (ls.busy) return;
+    var s = window.MAE.state();
+    if (!s.online || !s.logged) { $("lsSt").className = "sw-chip c-no"; $("lsSt").textContent = "conecte no MAE (aba Entrada)"; return; }
+    neName = clean(neName, "Site"); if (!neName) return;
+    for (var w = 0; window.MAE.state().busy && w < 60; w++) { $("lsSt").className = "sw-chip c-wt"; $("lsSt").textContent = "aguardando o painel do MAE…"; await new Promise(function (r) { setTimeout(r, 3000); }); }
+    if (window.MAE.state().busy) { $("lsSt").className = "sw-chip c-no"; $("lsSt").textContent = "MAE ocupado — clique em Atualizar"; return; }
+    ls.busy = true; $("lsRun").disabled = true;
+    $("lsSt").className = "sw-chip c-run"; $("lsSt").textContent = "consultando " + neName + "…";
+    window.MAE.setBusy(true);
+    try {
+      var r = await call("/run", { ne: neName, cmds: ["LST SOFTWARE:;"] });
+      if (r.status !== 200 || !Array.isArray(r.j)) throw new Error(errMsg(r));
+      var x = r.j[r.j.length - 1] || {}, txt = mask(r.j.map(function (y) { return y.resp; }).join("\n")).trim();
+      $("lsRaw").textContent = txt || "—";
+      if (!x.ok) throw new Error(r.j[0] && r.j[0].cmd && /^REG NE/.test(r.j[0].cmd) && !r.j[0].ok ? "REG NE falhou para " + neName : "LST SOFTWARE sem RETCODE = 0");
+      ls.ne = neName; ls.rows = parseLstSoftware(txt); drawLs();
+      $("lsSt").className = "sw-chip c-ok"; $("lsSt").textContent = neName + " · " + now();
+    } catch (er) {
+      $("lsSt").className = "sw-chip c-er"; $("lsSt").textContent = er.message;
+    } finally { await call("/unreg", {}).catch(function () {}); window.MAE.setBusy(false); ls.busy = false; $("lsRun").disabled = false; }
+  }
+  // consulta automática: só uma vez por site (o botão Atualizar força de novo)
+  function lsAuto(n) {
+    n = String(n || "").trim();
+    if (!n || ls.busy || ls.want.toUpperCase() === n.toUpperCase()) return;
+    var s = window.MAE.state(); if (!s.online || !s.logged || (s.version != null && s.version < MINV)) return;
+    ls.want = n; lsRun(n).catch(function () {});
+  }
+  $("lsRun").addEventListener("click", function () { if (!ne()) { tell("Informe o site", "Digite o NE no topo da aba ou use o site carregado."); return; } ls.want = ne(); lsRun(ne()).catch(function (e) { tell("LST SOFTWARE", e.message); }); });
+  $("swNe").addEventListener("change", function () { if (!$("swP-sw").hidden) lsAuto(ne()); bkPrev(); });
+  // site carregado na aba Entrada → acompanha aqui e já consulta o LST SOFTWARE
+  var lastLoaded = loadedSite();
+  if ($("neLbl") && window.MutationObserver) new MutationObserver(function () {
+    var n = loadedSite(); if (!n || n === lastLoaded) return;
+    if (!ne() || ne() === lastLoaded) { $("swNe").value = n; refreshPrev(); bkPrev(); }
+    lastLoaded = n;
+    if (ne() === n) lsAuto(n);
+  }).observe($("neLbl"), { childList: true, characterData: true, subtree: true });
   $("swStatus").addEventListener("click", guard(async function () {
     var R = readyMml(), cmd = $("stCmd").value.trim();
     if (!/^[A-Z]+\s+[A-Z0-9_]+\s*:.*;$/i.test(cmd)) throw new Error("Comando de status inválido (ajuste em Status e logs).");
@@ -751,11 +928,11 @@
   $("ccPwd").disabled = true;
   function showCfgCmd() {
     cfgCmd = cfgBuild(true);
-    $("rsCmd").textContent = mask(cfgCmd) + ($("ccAct").checked ? "\n" + ACT_CFG : "");
+    $("rsCmd").textContent = FTPS + "\n" + mask(cfgCmd) + ($("ccAct").checked ? "\n" + ACT_CFG : "");
     gate();
   }
   $("ccGen").addEventListener("click", guard(function () { showCfgCmd(); }));
-  $("ccAct").addEventListener("change", function () { if (cfgCmd) $("rsCmd").textContent = mask(cfgCmd) + (this.checked ? "\n" + ACT_CFG : ""); });
+  $("ccAct").addEventListener("change", function () { if (cfgCmd) $("rsCmd").textContent = FTPS + "\n" + mask(cfgCmd) + (this.checked ? "\n" + ACT_CFG : ""); });
   $("ccCopy").addEventListener("click", function () { copy($("rsCmd").textContent, this); });
   function cfgWarn(neName, extra) {
     return '<dl><dt>Site (NE)</dt><dd>' + esc(neName) + '</dd>' + (up ? '<dt>Arquivo</dt><dd>' + esc(up.fileName) + '</dd>' : '') + '</dl><pre>' + esc(ACT_CFG) + '</pre>' +
@@ -765,12 +942,12 @@
     var R = readyMml(); showCfgCmd();
     var act = $("ccAct").checked;
     var html = (R.known ? "" : '<div class="dg">' + esc(R.ne) + ' não está na lista de NEs do MAE.</div>') +
-      '<dl><dt>Site (NE)</dt><dd>' + esc(R.ne) + '</dd><dt>Arquivo</dt><dd>' + esc(up.remotePath) + '</dd></dl><pre>' + esc(mask(cfgCmd)) + '</pre>';
+      '<dl><dt>Site (NE)</dt><dd>' + esc(R.ne) + '</dd><dt>Arquivo</dt><dd>' + esc(up.remotePath) + '</dd></dl><pre>' + esc(FTPS + "\n" + mask(cfgCmd)) + '</pre>';
     if (!await ask({ title: "Executar DLD CFGFILE em " + R.ne + "?", html: html, ok: "Executar na BBU" })) return;
-    var steps = [{ cmd: cfgCmd, label: "DLD CFGFILE", long: true, maxsec: 1800 }];
+    var steps = [FTPS_STEP(), { cmd: cfgCmd, label: "DLD CFGFILE", long: true, need: "auto", maxsec: 1800 }];
     if (act) {
       if (!await ask({ title: "2ª confirmação — ACT CFGFILE em " + R.ne, html: cfgWarn(R.ne, " O ACT será enviado sozinho assim que o download terminar com sucesso."), typed: "ATIVAR " + R.ne, ok: "Confirmar DLD + ACT", danger: true })) return;
-      steps.push({ cmd: ACT_CFG, label: "ACT CFGFILE", long: true, maxsec: 1800 });
+      steps.push({ cmd: ACT_CFG, label: "ACT CFGFILE", long: true, need: "auto", maxsec: 1800 });
     }
     var v = await startJob(R.ne, "Carregar CFGFILE" + (act ? " + ativação" : ""), steps, { kind: "cfg", server: $("ccIp").value.trim(), item: up.fileName }, "cfg");
     cfgJob = jobs[v.id]; drawCfgRun();
@@ -778,7 +955,7 @@
   $("ccActNow").addEventListener("click", guard(async function () {
     var R = readyMml();
     if (!await ask({ title: "ACT CFGFILE em " + R.ne, html: cfgWarn(R.ne), typed: "ATIVAR " + R.ne, ok: "Ativar agora", danger: true })) return;
-    var v = await startJob(R.ne, "Ativar CFGFILE", [{ cmd: ACT_CFG, label: "ACT CFGFILE", long: true, maxsec: 1800 }], { kind: "cfg", item: up ? up.fileName : "" }, "cfg");
+    var v = await startJob(R.ne, "Ativar CFGFILE", [{ cmd: ACT_CFG, label: "ACT CFGFILE", long: true, need: "auto", maxsec: 1800 }], { kind: "cfg", item: up ? up.fileName : "" }, "cfg");
     cfgJob = jobs[v.id]; drawCfgRun();
   }));
   function drawCfgRun() {
@@ -793,6 +970,120 @@
     if (cfgJob && (cfgJob.v.state === "running" || cfgJob.v.state === "queued")) { tell("Execução em andamento", "Aguarde terminar (ou use “Parar de aguardar” no topo) antes de limpar."); return; }
     up = null; cfgCmd = ""; cfgJob = null; $("cfOut").innerHTML = ""; $("rsCmd").textContent = "—";
     $("rsUp").innerHTML = chip("c-no", "não iniciado"); drawCfgRun(); gate();
+  });
+
+  // =====================================================================
+  //  BKP (logs TXT + backup XML → pasta do OneDrive)
+  // =====================================================================
+  var bkJob = null, bkGot = {};
+  function bkVals(real) {
+    var o = { logs: $("bkLogs").checked, xml: $("bkXml").checked, kind: $("bkKind").value,
+      bl: clean($("bkBl").value, "BL"), ip: clean($("bkIp").value, "IP no comando"), usr: clean($("bkUsr").value, "USR no comando"),
+      dir: clean($("bkDir").value, "Diretório"), host: $("bkHost").value.trim(), proto: $("bkProto").value,
+      port: parseInt($("bkPort").value, 10) || ($("bkProto").value === "FTP" ? 21 : 22), fsUser: $("bkFsUser").value.trim(), dest: $("bkDest").value.trim() };
+    if (/[\r\n]/.test(o.dest)) throw new Error("Pasta local inválida.");
+    o.pwd = real ? clean(pwOf("bkPwd", "servidor do backup"), "Senha") : "********";
+    return o;
+  }
+  function bkSteps(o, site) {
+    var st = [], force = o.kind === "AUTO" ? "" : o.kind;
+    if (!o.logs && !o.xml) throw new Error("Marque pelo menos uma opção: Logs ou Backup XML.");
+    var fs = { host: o.host, protocol: o.proto, port: o.port, user: o.fsUser, pwd: o.pwd, dir: o.dir };
+    if (o.logs) {
+      st.push({ cmd: "#NODEINFO", label: "LST NODE (escolhe a lista)", force: force });
+      st.push({ cmd: "#COLLECT", label: "Coletar logs (TXT)", lists: LISTS, force: force, maxsec: 3600 });
+    }
+    if (o.xml) {
+      need(o.ip, "IP no comando"); need(o.usr, "USR no comando"); need(o.dir, "Diretório (DIR)"); need(o.host, "Servidor visto deste PC"); need(o.fsUser, "Usuário (deste PC)");
+      st.push({ cmd: "BKP CFGFILE:ENCRYPTMODE=UNENCRYPTED" + (o.bl ? ',BL="' + o.bl + '"' : "") + ";", label: "BKP CFGFILE", long: true, need: "success", maxsec: 1800 });
+      st.push({ cmd: "LST CFGFILE:;", label: "LST CFGFILE" });
+      st.push({ cmd: "#FSPREP", label: "Conferir a pasta no servidor", fs: fs });
+      st.push(FTPS_STEP());
+      st.push({ cmd: 'ULD CFGFILE:MODE=IPV4,IP="' + o.ip + '",USR="' + o.usr + '",PWD="' + o.pwd + '",DIR="' + o.dir + '";', label: "ULD CFGFILE", long: true, need: "auto", maxsec: 1800 });
+      st.push({ cmd: "#FSFETCH", label: "Renomear com o nome do site", fs: fs, maxsec: 900 });
+    }
+    st.push({ cmd: "#SAVE", label: o.dest ? "Gravar na pasta do OneDrive" : "Deixar pronto para baixar", dest: o.dest });
+    return st;
+  }
+  var STEP_TXT = { "#NODEINFO": "LST NODE:;   → escolhe a lista SRAN / LTE / WCDMA", "#COLLECT": "(roda a lista de comandos e salva no TXT)",
+    "#FSPREP": "(confere/cria a pasta no servidor)", "#FSFETCH": "(espera o CFGDATA.XML chegar e renomeia para <SITE>_CFGDATA.XML)", "#SAVE": "" };
+  function bkPrev() {
+    var t, site = ne() || "<SITE>";
+    try {
+      var o = bkVals(false);
+      t = bkSteps(o, site).map(function (x, i) {
+        var c = x.cmd.charAt(0) === "#" ? STEP_TXT[x.cmd] : mask(x.cmd);
+        if (x.cmd === "#COLLECT") c = (o.kind === "AUTO" ? "lista conforme o LST NODE" : "lista " + o.kind + " (" + LISTS[o.kind].length + " comandos)") + " → " + site + "_LOGS_<data>.txt";
+        if (x.cmd === "#SAVE") c = o.dest ? "grava em " + o.dest.replace(/[\\\/]+$/, "") + (o.dest.indexOf("/") >= 0 ? "/" : "\\") + site + "\\" : "sem pasta: baixa pelo navegador";
+        return (i + 1) + ") " + x.label + (c ? "\n   " + c : "");
+      }).join("\n");
+    } catch (e) { t = "⚠ " + e.message; }
+    $("bkPrev").textContent = t;
+    $("bkRun").textContent = "▶ Fazer backup" + (ne() ? " de " + ne() : "");
+  }
+  ["bkLogs", "bkXml", "bkKind", "bkBl", "bkIp", "bkUsr", "bkDir", "bkHost", "bkProto", "bkPort", "bkFsUser", "bkDest"].forEach(function (i) { $(i).addEventListener("input", bkPrev); $(i).addEventListener("change", bkPrev); });
+  $("bkProto").addEventListener("change", function () { $("bkPort").value = this.value === "FTP" ? 21 : 22; save(); bkPrev(); });
+  $("bkRun").addEventListener("click", guard(async function () {
+    var R = readyMml(), o = bkVals(true), steps = bkSteps(o, R.ne);
+    var html = (R.known ? "" : '<div class="dg">' + esc(R.ne) + ' não está na lista de NEs do MAE.</div>') +
+      '<dl><dt>Site (NE)</dt><dd>' + esc(R.ne) + '</dd><dt>Logs (TXT)</dt><dd>' + (o.logs ? (o.kind === "AUTO" ? "lista pelo LST NODE" : "lista " + o.kind) : "não") + '</dd>' +
+      '<dt>Backup XML</dt><dd>' + (o.xml ? "sim → " + esc(o.dir) : "não") + '</dd><dt>Destino</dt><dd>' + esc(o.dest ? o.dest + " \\ " + R.ne : "baixar pelo navegador") + '</dd></dl>' +
+      '<pre>' + esc($("bkPrev").textContent) + '</pre>' +
+      (o.xml ? '<p>O backup não reinicia o site. Antes do ULD vai o <b>SET FTPSCLT:ENCRYMODE=Plaintext;</b>.</p>' : '');
+    if (!await ask({ title: "Fazer backup de " + R.ne + "?", html: html, ok: "Fazer backup" })) return;
+    if (o.dest) {
+      var c = await call("/local/check", { path: o.dest });
+      if (c.status !== 200 || !c.j.ok) throw new Error("Pasta local: " + errMsg(c));
+    }
+    var v = await startJob(R.ne, "Backup (BKP)", steps, { kind: "bkp", server: o.xml ? o.ip : "", item: [o.logs ? "logs" : "", o.xml ? "XML" : ""].filter(Boolean).join(" + "), dest: o.dest }, "bkp");
+    bkJob = jobs[v.id]; drawBkRun();
+  }));
+  function dlFile(id, name) {
+    return fetch(HELPER + "/job/file?id=" + encodeURIComponent(id) + "&name=" + encodeURIComponent(name)).then(function (r) {
+      if (!r.ok) throw new Error("o helper não tem mais este arquivo (foi reiniciado?)");
+      return r.blob();
+    }).then(function (b) {
+      var a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+    });
+  }
+  function drawBkRun() {
+    if (!bkJob) { $("bkSt").innerHTML = chip("c-no", "não iniciado"); $("bkFiles").textContent = "—"; return; }
+    var v = bkJob.v, cur = v.steps[Math.max(0, v.cur)] || {};
+    $("bkSt").innerHTML = stChip(v.state) + " " + esc(v.ne) + (v.state === "running" ? " · " + esc(cur.label || "") + (cur.pct != null ? " " + cur.pct + "%" : "") + (cur.msg ? " · " + esc(cur.msg) : "") : "") +
+      (v.state === "failed" ? " · " + esc((v.steps.filter(function (x) { return x.state === "failed"; })[0] || {}).msg || v.note || "") : "");
+    var f = v.files || [];
+    $("bkFiles").innerHTML = f.length ? '<div class="bk-files">' + f.map(function (x) {
+      return '<div><span class="mono">' + esc(x.name) + '</span><span class="muted">' + fmtBytes(x.bytes) + '</span><button class="ghost" type="button" style="padding:3px 10px" data-dl="' + esc(x.name) + '">Baixar</button></div>';
+    }).join("") + '</div>' + (v.savedTo ? '<p class="sw-note">' + chip("c-ok", "gravado") + ' em <span class="mono">' + esc(v.savedTo) + '</span></p>' : '') : "—";
+    var meta = v.meta || {};
+    if (v.state === "done" && !v.savedTo && !meta.dest && f.length && !bkGot[v.id]) {     // sem pasta: baixa sozinho no fim
+      bkGot[v.id] = 1; f.forEach(function (x, i) { setTimeout(function () { dlFile(v.id, x.name).catch(function () {}); }, i * 600); });
+    }
+  }
+  $("bkFiles").addEventListener("click", function (ev) {
+    var n = ev.target.getAttribute("data-dl"); if (!n || !bkJob) return;
+    dlFile(bkJob.v.id, n).catch(function (e) { tell("Baixar arquivo", e.message); });
+  });
+  $("bkTest").addEventListener("click", guard(async function () {
+    ready(); var p = $("bkDest").value.trim(); if (!p) throw new Error("Informe a pasta local (ou use Procurar).");
+    var r = await call("/local/check", { path: p });
+    $("bkDestOut").innerHTML = r.status === 200 && r.j.ok ? '<p class="sw-note">' + chip("c-ok", "OK") + ' ' + esc(r.j.path) + ' — ' + esc(r.j.message) + '</p>'
+      : '<div class="sw-warn">✖ ' + esc(errMsg(r)) + '</div>';
+  }));
+  $("bkFind").addEventListener("click", guard(async function () {
+    ready(); $("bkDestOut").innerHTML = '<p class="sw-note">Procurando a pasta 2026 no OneDrive deste PC…</p>';
+    var r = await call("/local/find", { name: "2026" });
+    if (r.status !== 200) throw new Error(errMsg(r));
+    var f = r.j.found || [];
+    $("bkDestOut").innerHTML = f.length ? '<p class="sw-note">Encontrada(s) — clique para usar:</p><div class="bk-files">' + f.map(function (x) {
+      return '<div><button class="ghost" type="button" style="padding:3px 10px" data-dest="' + esc(x) + '">Usar</button><span class="mono">' + esc(x) + '</span></div>';
+    }).join("") + '</div>' : '<div class="sw-warn">Não achei uma pasta “2026” ' + (r.j.roots.length ? "dentro de " + esc(r.j.roots.join(" · ")) : "(este PC não tem OneDrive configurado)") +
+      '. Abra o link da pasta 2026, clique em <b>Adicionar atalho a Meus arquivos</b>, espere aparecer no Explorador e procure de novo.</div>';
+  }));
+  $("bkDestOut").addEventListener("click", function (ev) {
+    var d = ev.target.getAttribute("data-dest"); if (!d) return;
+    $("bkDest").value = d; save(); bkPrev(); $("bkTest").click();
   });
 
   // ---------- senha padrão salva no helper ----------
@@ -837,8 +1128,13 @@
   // ---------- início ----------
   applyProf(); gate(); conn(); drawPw(); pwStatus();
   if (!ne() && loadedSite()) $("swNe").value = loadedSite();
+  refreshPrev(); bkPrev(); drawBkRun();
   var tab = $("tab-sw");
-  if (tab) tab.addEventListener("click", function () { conn(); fillNe(); reattach(); if (!ne() && loadedSite()) { $("swNe").value = loadedSite(); refreshPrev(); } });
+  if (tab) tab.addEventListener("click", function () {
+    conn(); fillNe(); reattach();
+    if (!ne() && loadedSite()) { $("swNe").value = loadedSite(); refreshPrev(); bkPrev(); }
+    if (!$("swP-sw").hidden) lsAuto(ne());
+  });
   setInterval(function () { conn(); reattach(); if (!pwEdit) pwStatus(); }, 3000);
-  window.SW_TAB = { jobs: function () { return jobs; }, logs: function () { return logs; } };
+  window.SW_TAB = { jobs: function () { return jobs; }, logs: function () { return logs; }, parseLstSoftware: parseLstSoftware, lists: LISTS };
 })();
