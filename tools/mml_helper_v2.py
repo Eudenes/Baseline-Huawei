@@ -11,6 +11,9 @@
 #        /job/*          comandos demorados (DLD/ACT/SPL) em segundo plano, com percentual
 #        /file-server/*  teste, listagem e upload de XML no servidor de arquivos (FTP ou SFTP)
 # v3.3 = /secret/set e /secret/clear: senha padrao guardada neste PC (DPAPI no Windows)
+# v3.4 = aba "BKP, CFGFILE e SW": comandos longos (DLD/ACT/BKP) so terminam com "Status = Success";
+#        passos especiais de backup (#NODEINFO, #COLLECT, #FSPREP, #FSFETCH, #SAVE), /job/file,
+#        /local/check e /local/find (pasta do OneDrive sincronizada neste PC)
 import argparse, base64, datetime as dt, gzip, io, json, os, re, socket, stat, sys, threading, time
 from urllib.parse import urlparse, parse_qs
 import xml.etree.ElementTree as ET
@@ -20,7 +23,7 @@ MAE_IP, MAE_PORT = os.environ.get("MAE_IP", "10.220.30.9"), int(os.environ.get("
 EOL = b"\r\n"
 LOCAL_PORT = 8765
 END = "---    END"
-VERSION = "3.3"
+VERSION = "3.4"
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(HERE, "helper.log")
 PM_ROOT = "/opt/oss/server/var/fileint/pmneexport"
@@ -76,7 +79,7 @@ class MML:
             if stop and stop(): return buf + "\n[INTERROMPIDO]"
             if done and END in buf and time.time() - last >= 0.5 and done(buf): return buf
             i = buf.rfind(END)
-            if i >= 0 and time.time() - last >= idle:
+            if i >= 0 and idle is not None and time.time() - last >= idle:
                 # olha so o ultimo relatorio (entre o END anterior e o ultimo END):
                 # se ele termina com "To be continued...", ainda vem mais parte.
                 prev = buf.rfind(END, 0, i)
@@ -105,11 +108,17 @@ class MML:
     def send_long(self, cmd, maxsec=3600, quiet=20, on_data=None, stop=None, done=None):
         """Comando demorado (DLD/ACT/SPL): o site manda varios relatorios de progresso.
         Termina quando o ultimo relatorio nao traz "To be continued" E passam `quiet` segundos
-        sem chegar nada novo (ou quando done()/stop() mandam parar)."""
+        sem chegar nada novo (ou quando done()/stop() mandam parar).
+        quiet=None: o silencio nao encerra; so done()/stop() ou o tempo maximo."""
         if not self.sock:
             if not self.user: raise RuntimeError("Nao logado")
             self.login(self.user, self.pwd)
-        return self._send(cmd, maxsec, idle=max(1.0, float(quiet)), on_data=on_data, stop=stop, done=done)
+        idle = None if quiet is None else max(1.0, float(quiet))
+        return self._send(cmd, maxsec, idle=idle, on_data=on_data, stop=stop, done=done)
+
+    def read_more(self, maxsec, on_data=None, stop=None, done=None):
+        """Continua lendo relatorios do comando que ja esta em curso (sem reenviar nada)."""
+        return self._read(maxsec, idle=None, on_data=on_data, stop=stop, done=done)
 
     def login(self, user, pwd):
         self.close()
@@ -577,7 +586,7 @@ def secret_clear():
 def use_saved(text):
     """Troca o marcador pela senha salva (so no momento do envio)."""
     if SAVED_TOKEN not in (text or ""): return text
-    if not SAVED["pwd"]: raise ApiError(409, "no_saved_pwd", "nao ha senha salva neste PC: salve no topo da aba SW & CFGFILE")
+    if not SAVED["pwd"]: raise ApiError(409, "no_saved_pwd", "nao ha senha salva neste PC: salve no topo da aba BKP, CFGFILE e SW")
     return text.replace(SAVED_TOKEN, SAVED["pwd"])
 
 
@@ -595,7 +604,7 @@ class ApiError(Exception):
 # A pagina dispara /job/start e vai consultando /job/status: nada fica preso no navegador,
 # entao da para trocar de aba (ou ate recarregar a pagina) enquanto o site baixa o software.
 RET_RE = re.compile(r"RETCODE\s*=\s*(\d+)\s*([^\r\n]*)")
-PCT_RE = r"(\d{1,3})\s*%"
+PCT_RE = r"Progress\s*=\s*(\d{1,3})\s*%"      # so a linha "Progress  =  N%" (o eco %%CMD%% tambem tem %)
 JOBS, JOBS_LOCK, JOB_SEQ = {}, threading.Lock(), [0]
 MAX_RUNNING = 6
 
@@ -617,6 +626,51 @@ def judge(resp):
     return True, f"RETCODE = 0 {codes[-1][1].strip()}"
 
 
+STATUS_RE = re.compile(r"^\s*Status\s*=\s*(.+?)\s*$", re.M)
+FINAL_BAD = re.compile(r"fail|error|abort|cancel|timeout|stop|refus|reject", re.I)
+SPECIAL = ("#WAIT", "#UNTIL", "#NODEINFO", "#COLLECT", "#FSPREP", "#FSFETCH", "#SAVE")
+SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def verb_of(cmd):
+    """'DLD SOFTWARE:MODE=...' -> 'DLD SOFTWARE'"""
+    return " ".join(cmd.split(":", 1)[0].split()[:2]).upper()
+
+
+def segments(buf):
+    """Relatorios MML (cada um termina em ---    END), do mais antigo ao mais novo."""
+    return [x for x in (buf or "").split(END) if x.strip()]
+
+
+def last_status(buf, verb):
+    """Ultimo 'Status = X' de um relatorio que ecoa o comando `verb` (ignora relatorios atrasados de outro comando)."""
+    for seg in reversed(segments(buf)):
+        if verb and verb not in seg.upper(): continue
+        m = STATUS_RE.findall(seg)
+        if m: return m[-1].strip()
+    return None
+
+
+def is_success(st): return bool(st) and st.strip().lower() in ("success", "succeeded", "successful")
+
+
+def site_name(ne):
+    n = SAFE_NAME.sub("_", str(ne or "").strip()).strip("._")
+    if not n: raise ApiError(400, "bad_ne", "nome do site invalido")
+    return n
+
+
+def pick_list(node_resp, force=""):
+    """SRAN / LTE / WCDMA pelo Product Type do LST NODE (ou o tipo escolhido na pagina)."""
+    if force in ("SRAN", "LTE", "WCDMA"): return force, "escolhido na pagina"
+    m = re.search(r"Product Type\s*=\s*(.+)", node_resp or "")
+    pt = (m.group(1).strip() if m else "")
+    up = pt.upper()
+    w, l = "WCDMA" in up or "UMTS" in up, "LTE" in up
+    kind = "WCDMA" if (w and not l) else "LTE" if (l and not w) else "SRAN"
+    return kind, ("Product Type = " + pt) if pt else "Product Type nao encontrado no LST NODE"
+
+
 class Job:
     def __init__(self, body):
         if not mml.user: raise ApiError(409, "not_logged", "Conecte no painel Executar no MAE (aba Entrada) primeiro")
@@ -626,22 +680,36 @@ class Job:
         if not steps: raise ApiError(400, "no_steps", "nenhum comando para executar")
         self.title = str(body.get("title") or "Tarefa")[:120]
         self.meta = body.get("meta") if isinstance(body.get("meta"), dict) else {}
-        self.pct_re = _rx(body.get("pctRe") or PCT_RE, "percentual")
+        pr = body.get("pctRe")
+        if pr in (r"(\d{1,3})\s*%", r"(\d{1,3})%"): pr = None      # padrao antigo pegava o eco %%CMD%%
+        self.pct_re = _rx(pr or PCT_RE, "percentual")
         self.done_re = _rx(body.get("doneRe"), "fim do comando")
         self.fail_re = _rx(body.get("failRe"), "falha")
         self.steps = []
         for s in steps:
             cmd = str(s.get("cmd") or "").strip()
             if not cmd: continue
+            if cmd.startswith("#") and cmd.split()[0].upper() not in SPECIAL:
+                raise ApiError(400, "bad_step", "passo especial desconhecido: " + cmd.split()[0])
+            need = str(s.get("need") or "").lower()
             self.steps.append({"label": str(s.get("label") or "")[:80], "cmd": cmd, "long": bool(s.get("long")),
+                               "need": need if need in ("success", "auto") else "",
                                "maxsec": max(10, min(int(s.get("maxsec") or 180), 6 * 3600)),
                                "quiet": max(1, min(int(s.get("quiet") or 20), 600)),
+                               "fs": s.get("fs") if isinstance(s.get("fs"), dict) else None,
+                               "dest": str(s.get("dest") or "").strip(),
+                               "lists": s.get("lists") if isinstance(s.get("lists"), dict) else {},
+                               "force": str(s.get("force") or "").upper(),
                                "state": "pending", "pct": None, "ok": None, "msg": "", "resp": "", "t0": 0, "t1": 0})
         if not self.steps: raise ApiError(400, "no_steps", "nenhum comando para executar")
-        for s in self.steps: use_saved(s["cmd"])            # sem senha salva: recusa ja na partida
+        for s in self.steps:                                # sem senha salva: recusa ja na partida
+            use_saved(s["cmd"])
+            if s["fs"]: use_saved(str(s["fs"].get("pwd") or ""))
+            if s["cmd"].upper().startswith("#SAVE") and s["dest"]: local_dir(s["dest"])
         self.state, self.note, self.abort, self.cur = "queued", "", False, -1
         self.created, self.ended = time.time(), 0
         self.user, self.pwd = mml.user, mml.pwd
+        self.ctx, self.files, self.saved_to = {}, {}, ""
         with JOBS_LOCK:
             if sum(1 for j in JOBS.values() if j.state in ("queued", "running")) >= MAX_RUNNING:
                 raise ApiError(429, "busy", f"ja existem {MAX_RUNNING} tarefas em andamento")
@@ -658,50 +726,184 @@ class Job:
         steps = []
         for s in self.steps:
             r = mask(s["resp"])
-            steps.append({"label": s["label"], "cmd": mask(s["cmd"]), "long": s["long"], "state": s["state"], "pct": s["pct"],
+            steps.append({"label": s["label"], "cmd": mask(s["cmd"]), "long": s["long"], "need": s["need"], "state": s["state"], "pct": s["pct"],
                           "ok": s["ok"], "msg": s["msg"], "resp": r if full else r[-6000:], "respLen": len(r),
                           "t0": s["t0"], "t1": s["t1"]})
         return {"id": self.id, "ne": self.ne, "title": self.title, "meta": self.meta, "state": self.state, "note": self.note,
-                "cur": self.cur, "created": self.created, "ended": self.ended, "now": time.time(), "steps": steps}
+                "cur": self.cur, "created": self.created, "ended": self.ended, "now": time.time(), "steps": steps,
+                "files": [{"name": k, "bytes": len(v)} for k, v in self.files.items()], "savedTo": self.saved_to}
 
     def _pct(self, s, buf):
         hits = self.pct_re.findall(buf[-4000:]) if self.pct_re else []
         if hits:
             try:
                 v = int(hits[-1] if isinstance(hits[-1], str) else hits[-1][0])
-                if 0 <= v <= 100: s["pct"] = v
+                if 0 <= v <= 100:
+                    # 100% so quando o site disser "Status = Success" (antes disso ainda falta a checagem final)
+                    if s["need"] and v >= 100 and not is_success(last_status(buf, verb_of(s["cmd"]))): v = 99
+                    s["pct"] = v
             except (ValueError, IndexError): pass
+
+    def _sleep(self, n):
+        for _ in range(int(n)):
+            if self.abort: return False
+            time.sleep(1)
+        return True
 
     def _one(self, m, s):
         line = use_saved(s["cmd"])
-        if line.upper().startswith("#WAIT"):
+        head = line.split()[0].upper() if line.startswith("#") else ""
+        if head == "#WAIT":
             n = int(line.split()[1])
-            for _ in range(n):
-                if self.abort: return "[INTERROMPIDO]"
-                time.sleep(1)
+            if not self._sleep(n): return "[INTERROMPIDO]"
             return f"aguardou {n}s\nRETCODE = 0  ok"
-        if line.upper().startswith("#UNTIL"):
+        if head == "#UNTIL":
             cmd, alvo = [x.strip() for x in line[6:].split("|", 1)]
             rx, r = re.compile(alvo), ""
             for _ in range(max(1, s["maxsec"] // 20)):
                 r = m.send(cmd); s["resp"] = r; self._pct(s, r)
                 if rx.search(r): return r
-                for _ in range(20):
-                    if self.abort: return r + "\n[INTERROMPIDO]"
-                    time.sleep(1)
+                if not self._sleep(20): return r + "\n[INTERROMPIDO]"
             return r + f"\n[TIMEOUT {s['maxsec']}s] a resposta nao casou com: {alvo}"
+        if head: return self._special(m, s, head)
         if not s["long"]:
             return m.send(line, s["maxsec"])
+
+        verb, need = verb_of(line), s["need"]
 
         def on_data(buf):
             s["resp"] = buf; self._pct(s, buf)
 
         def done(buf):
-            i = buf.rfind(END); prev = buf.rfind(END, 0, i)
-            seg = buf[prev + len(END) if prev >= 0 else 0:i]
+            segs = segments(buf)
+            seg = segs[-1] if segs else ""
             if any(c != "0" for c, _ in RET_RE.findall(seg)): return True        # o site ja recusou: nao ha o que esperar
+            if need:
+                st = last_status(buf, verb)
+                if st and (is_success(st) or FINAL_BAD.search(st)): return True
             return bool(self.done_re and self.done_re.search(seg)) or bool(self.fail_re and self.fail_re.search(seg))
-        return m.send_long(line, s["maxsec"], s["quiet"], on_data, lambda: self.abort, done)
+        t0 = time.time()
+        quiet = None if need == "success" else s["quiet"]
+        r = m.send_long(line, s["maxsec"], quiet, on_data, lambda: self.abort, done)
+        # "auto": se o site comecou a mandar relatorios de progresso, so termina no Status final
+        while need == "auto" and "[TIMEOUT" not in r and "[INTERROMPIDO]" not in r and not done(r):
+            st = last_status(r, verb)
+            left = s["maxsec"] - (time.time() - t0)
+            if st is None or left <= 0: break
+            pre = r
+            r = pre + m.read_more(left, lambda b: on_data(pre + b), lambda: self.abort, lambda b: done(pre + b))
+        return r
+
+    # ---------- passos especiais do backup ----------
+    def _special(self, m, s, head):
+        site = site_name(self.ne)
+        if head == "#NODEINFO":
+            r = m.send("LST NODE:;", 120)
+            kind, why = pick_list(r, s["force"])
+            self.ctx["kind"] = kind
+            s["label"] = s["label"] or "LST NODE"
+            return r + f"\n[tipo de lista: {kind} - {why}]"
+        if head == "#COLLECT":
+            kind = self.ctx.get("kind") or (s["force"] if s["force"] in ("SRAN", "LTE", "WCDMA") else "SRAN")
+            cmds = [str(c).strip() for c in (s["lists"].get(kind) or []) if str(c).strip()]
+            if not cmds: return "[ERRO] lista de comandos %s vazia" % kind
+            stamp = time.strftime("%Y%m%d-%H%M")
+            out = ["Logs do site %s - %s - lista %s (%d comandos)" % (self.ne, time.strftime("%Y-%m-%d %H:%M:%S"), kind, len(cmds)), ""]
+            if self.ctx.get("nodeResp"): out += [self.ctx["nodeResp"].strip(), ""]
+            bad = 0
+            for i, c in enumerate(cmds):
+                if self.abort: return "\n".join(out) + "\n[INTERROMPIDO]"
+                s["pct"] = int(i * 100 / len(cmds)); s["msg"] = "%d/%d %s" % (i + 1, len(cmds), c)
+                try:
+                    r = m.send(c, 300)
+                except Exception as e:
+                    r = "[ERRO] %s: %s" % (c, e)
+                if "RETCODE = 0" not in r: bad += 1
+                out += [r.strip(), ""]
+            txt = mask("\r\n".join(x.replace("\r\n", "\n").replace("\n", "\r\n") for x in out))
+            name = "%s_LOGS_%s.txt" % (site, stamp)
+            self.files[name] = txt.encode("utf-8")
+            s["pct"] = 100
+            return "%s gerado (%d comandos, %d sem RETCODE = 0)\nRETCODE = 0  ok" % (name, len(cmds), bad)
+        if head == "#FSPREP":
+            fs = s["fs"] or {}
+            c = fs_open(*fs_params(fs))
+            try:
+                d = str(fs.get("dir") or "/").strip()
+                try:
+                    items = c.ls(d)
+                except Exception:
+                    c.mkdir(d.rstrip("/")); items = c.ls(d)
+                self.ctx["snap"] = {x["name"]: (x["size"], x["mtime"]) for x in items if x["type"] == "file"}
+                self.ctx["fsdir"] = d
+            except Exception as e:
+                raise fs_error(e)
+            finally:
+                c.close()
+            return "pasta %s pronta (%d arquivo(s) antes do ULD)\nRETCODE = 0  ok" % (d, len(self.ctx["snap"]))
+        if head == "#FSFETCH":
+            fs = s["fs"] or {}
+            d = self.ctx.get("fsdir") or str(fs.get("dir") or "/").strip()
+            snap = self.ctx.get("snap") or {}
+            want = (self.ctx.get("cfgName") or "CFGDATA.XML").upper()
+            want_size = self.ctx.get("cfgSize")
+            t0, prev, last = time.time(), None, ""
+            while time.time() - t0 < s["maxsec"]:
+                if self.abort: return "[INTERROMPIDO]"
+                c = fs_open(*fs_params(fs))
+                try:
+                    items = [x for x in c.ls(d) if x["type"] == "file"]
+                    new = [x for x in items if snap.get(x["name"]) != (x["size"], x["mtime"]) and re.search(r"\.(xml|gz|zip)$", x["name"], re.I)
+                           and not x["name"].upper().startswith(site.upper() + "_")]
+                    hit = next((x for x in new if x["name"].upper() == want), None) or (sorted(new, key=lambda x: x["mtime"])[-1] if new else None)
+                    if hit:
+                        cur = (hit["name"], hit["size"], hit["mtime"])
+                        s["msg"] = "%s chegou (%d bytes), conferindo..." % (hit["name"], hit["size"])
+                        if hit["size"] and (cur == prev or (want_size and hit["size"] == want_size)):
+                            src = fs_join(d, hit["name"])
+                            base, dot, ext = hit["name"].rpartition(".")
+                            dst_name = "%s_%s" % (site, hit["name"])
+                            names = {x["name"] for x in items}
+                            if dst_name in names:
+                                dst_name = "%s_%s_%s.%s" % (site, base or hit["name"], time.strftime("%Y%m%d-%H%M"), ext if dot else "XML")
+                            dst = fs_join(d, dst_name)
+                            c.rename(src, dst)
+                            data = c.get(dst)
+                            self.files[dst_name] = data
+                            s["pct"] = 100
+                            return "%s renomeado para %s (%d bytes)\nRETCODE = 0  ok" % (hit["name"], dst, len(data))
+                        prev = cur
+                    else:
+                        s["msg"] = "aguardando o arquivo do ULD em %s..." % d
+                except ApiError:
+                    raise
+                except Exception as e:
+                    last = fs_error(e).payload["message"]; s["msg"] = "servidor: " + last
+                finally:
+                    c.close()
+                s["pct"] = min(95, int((time.time() - t0) * 100 / s["maxsec"]))
+                if not self._sleep(5): return "[INTERROMPIDO]"
+            return "[ERRO] o arquivo do ULD nao apareceu em %s depois de %d s %s" % (d, s["maxsec"], last)
+        if head == "#SAVE":
+            if not self.files: return "[ERRO] nenhum arquivo para gravar"
+            if not s["dest"]:
+                return "sem pasta local configurada: baixe os arquivos pela pagina\nRETCODE = 0  ok"
+            folder = os.path.join(local_dir(s["dest"]), site)
+            os.makedirs(folder, exist_ok=True)
+            for k, v in self.files.items():
+                with open(os.path.join(folder, k), "wb") as f: f.write(v)
+            self.saved_to = folder
+            return "gravado em %s (%s)\nRETCODE = 0  ok" % (folder, ", ".join(self.files))
+        return "[ERRO] passo desconhecido"
+
+    def _after(self, s, r):
+        """Guarda o que os proximos passos precisam (resposta do LST NODE, tamanho do CFGDATA)."""
+        v = verb_of(use_saved(s["cmd"])) if not s["cmd"].startswith("#") else s["cmd"].split()[0].upper()
+        if v == "#NODEINFO": self.ctx["nodeResp"] = r.split("\n[tipo de lista")[0]
+        if v == "LST CFGFILE":
+            n = re.search(r"File Name\s*=\s*(\S+)", r); z = re.search(r"File Size\(byte\)\s*=\s*(\d+)", r)
+            if n: self.ctx["cfgName"] = n.group(1)
+            if z: self.ctx["cfgSize"] = int(z.group(1))
 
     def run(self):
         m, own = mml, False
@@ -724,14 +926,30 @@ class Job:
                     self.cur = i; s["state"] = "running"; s["t0"] = time.time()
                     try:
                         r = self._one(m, s)
+                    except ApiError as e:
+                        r = (s["resp"] or "") + "\n[ERRO] " + e.payload["message"]
+                        s["resp"], s["ok"], s["msg"] = r, False, e.payload["message"]
                     except Exception as e:
                         r = (s["resp"] or "") + "\n[ERRO] " + str(e)
                         s["resp"], s["ok"], s["msg"] = r, False, str(e)
                     else:
-                        s["resp"] = r; self._pct(s, r)
+                        s["resp"] = r
+                        if s["long"]: self._pct(s, r)
                         s["ok"], s["msg"] = judge(r)
+                        if "[ERRO]" in r: s["ok"], s["msg"] = False, r.split("[ERRO]")[-1].strip()[:200]
+                        elif s["ok"] and s["cmd"].startswith("#") and s["cmd"].split()[0].upper() != "#UNTIL":
+                            s["msg"] = (r.split("\n[tipo de lista: ")[-1].rstrip("]\n ") if "[tipo de lista: " in r else r.strip().split("\n")[0])[:200]
                         if s["ok"] and self.fail_re and self.fail_re.search(r):
                             s["ok"], s["msg"] = False, "a resposta casou com a expressao de falha"
+                        if s["ok"] and s["need"] and s["long"]:
+                            st = last_status(r, verb_of(use_saved(s["cmd"])))
+                            if is_success(st):
+                                s["pct"], s["msg"] = 100, "Status = Success"
+                            elif s["need"] == "success" or st is not None:
+                                s["ok"] = False
+                                s["msg"] = ("o site terminou com Status = %s" % st) if st and FINAL_BAD.search(st) else \
+                                    "o site nao reportou Status = Success" + (" (ultimo: Status = %s)" % st if st else "")
+                        if s["ok"]: self._after(s, r)
                     s["t1"] = time.time()
                     s["state"] = "done" if s["ok"] else ("canceled" if self.abort else "failed")
                     if not s["ok"]: failed = True
@@ -739,13 +957,61 @@ class Job:
                 self.state = "canceled" if self.abort else ("failed" if failed else "done")
         except Exception as e:
             self.state = "failed"; self.note = (self.note + " " if self.note else "") + "Erro: " + str(e)
-            logf("job %s erro: %s" % (self.id, e))
+            logf("job %s erro: %s" % (self.id, mask(str(e))))
         finally:
             self.ended = time.time(); self.pwd = None
             for s in self.steps:
                 if s["state"] in ("pending", "running"): s["state"] = "skipped" if s["state"] == "pending" else "failed"
             if own: m.close()
             logf("job %s (%s em %s): %s" % (self.id, self.title, self.ne, self.state))
+
+
+def local_dir(path):
+    """Pasta local (ex.: a pasta 2026 do OneDrive sincronizada neste PC). Precisa existir."""
+    p = os.path.abspath(os.path.expanduser(os.path.expandvars(str(path or "").strip().strip('"'))))
+    if not str(path or "").strip(): raise ApiError(400, "no_dir", "informe a pasta local")
+    if not os.path.isdir(p): raise ApiError(404, "no_dir", "pasta nao encontrada neste PC: " + p)
+    return p
+
+
+def local_check(b):
+    p = local_dir(b.get("path"))
+    probe = os.path.join(p, ".teste_baseline_%d" % os.getpid())
+    try:
+        with open(probe, "w") as f: f.write("ok")
+        os.remove(probe); ok = True; msg = "pasta OK (gravacao testada)"
+    except Exception as e:
+        ok, msg = False, "sem permissao de gravar: %s" % e
+    return {"ok": ok, "path": p, "message": msg}
+
+
+def local_find(b):
+    """Procura a pasta (ex.: 2026) dentro do OneDrive deste PC, ate 3 niveis."""
+    name = str(b.get("name") or "2026").strip().lower()
+    roots, seen, out = [], set(), []
+    for k in ("OneDriveCommercial", "OneDrive", "OneDriveConsumer"):
+        v = os.environ.get(k)
+        if v and os.path.isdir(v) and v not in seen: roots.append(v); seen.add(v)
+    home = os.path.expanduser("~")
+    try:
+        for x in os.listdir(home):
+            q = os.path.join(home, x)
+            if x.lower().startswith("onedrive") and os.path.isdir(q) and q not in seen: roots.append(q); seen.add(q)
+    except OSError: pass
+    t0 = time.time()
+
+    def walk(d, lvl):
+        if lvl > 3 or time.time() - t0 > 8 or len(out) >= 20: return
+        try: ents = list(os.scandir(d))
+        except OSError: return
+        for e in ents:
+            try:
+                if not e.is_dir(): continue
+            except OSError: continue
+            if e.name.lower() == name: out.append(e.path)
+            walk(e.path, lvl + 1)
+    for r in roots: walk(r, 1)
+    return {"ok": True, "roots": roots, "found": out}
 
 
 def job_get(jid):
@@ -816,6 +1082,11 @@ class FtpCli:
             return None
 
     def put(self, data, path): self.f.storbinary("STOR " + path, io.BytesIO(data))
+
+    def get(self, path):
+        b = io.BytesIO(); self.f.retrbinary("RETR " + path, b.write); return b.getvalue()
+
+    def mkdir(self, path): self.f.mkd(path)
     def rename(self, a, b): self.f.rename(a, b)
     def remove(self, path): self.f.delete(path)
 
@@ -848,6 +1119,11 @@ class SftpCli:
         except IOError: return None
 
     def put(self, data, path): self.s.putfo(io.BytesIO(data), path)
+
+    def get(self, path):
+        b = io.BytesIO(); self.s.getfo(path, b); return b.getvalue()
+
+    def mkdir(self, path): self.s.mkdir(path)
 
     def rename(self, a, b):
         try: self.s.posix_rename(a, b)
@@ -1025,6 +1301,12 @@ class Handler(BaseHTTPRequestHandler):
             u = urlparse(self.path); q = {k: v[0] for k, v in parse_qs(u.query).items()}
             if u.path == "/job/status":
                 return self._json(job_get(q.get("id", "")).view(q.get("full") == "1"))
+            if u.path == "/job/file":
+                j = job_get(q.get("id", "")); name = q.get("name", "")
+                if name not in j.files: raise ApiError(404, "no_file", "arquivo nao encontrado nesta tarefa")
+                data = j.files[name]
+                self._hdr(200, "text/plain; charset=utf-8" if name.lower().endswith(".txt") else "application/octet-stream")
+                return self.wfile.write(data)
             if u.path == "/job/list":
                 return self._json([j.view() for j in sorted(JOBS.values(), key=lambda j: j.created)])
             if u.path == "/pm/progress":
@@ -1032,7 +1314,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"status": "ok", "version": VERSION, "logged": bool(mml.user), "user": mml.user, "mae": f"{MAE_IP}:{MAE_PORT}",
                         "sftp": {"logged": bool(sftp.sftp), "user": sftp.user}, "pmRoot": PM_ROOT,
                         "jobs": sum(1 for j in JOBS.values() if j.state in ("queued", "running")),
-                        "savedPwd": bool(SAVED["pwd"]), "savedPwdWarn": SAVED["warn"]})
+                        "savedPwd": bool(SAVED["pwd"]), "savedPwdWarn": SAVED["warn"],
+                        "features": ["needSuccess", "bkp", "local"]})
         except ApiError as e:
             self._json(e.payload, e.http)
         except Exception as e:
@@ -1065,6 +1348,8 @@ class Handler(BaseHTTPRequestHandler):
                 j = job_get(body.get("id", "")); j.abort = True
                 return self._json({"ok": True, "id": j.id})
             if p == "/secret/set": return self._json(secret_save(body.get("pwd")))
+            if p == "/local/check": return self._json(local_check(body))
+            if p == "/local/find": return self._json(local_find(body))
             if p == "/secret/clear": return self._json(secret_clear())
             if p == "/file-server/test": return self._json(fs_test(body))
             if p == "/file-server/list": return self._json(fs_list(body))
