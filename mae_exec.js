@@ -18,7 +18,8 @@
     { id: "modCmds",  after: "copyMod",    name: "Conexão física · comandos" },
     { id: "pwScript", after: "pwCopy",     name: "Potência · script" },
     { id: "pwRb",     after: "pwCopyRb",   name: "Potência · rollback", label: "▶ Executar rollback" },
-    { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true }
+    { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true },
+    { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script" }
   ];
   var BATCH = 5;
   var MML_RE = /^[A-Z][A-Z0-9]*\s+[A-Z0-9_]+\s*:.*;$/i;
