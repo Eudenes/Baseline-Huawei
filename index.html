@@ -551,7 +551,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
 <header class="app-head">
   <div class="app-top">
     <img class="app-logo" src="https://i.imgur.com/S6EvitM.png" alt="RF Team by Telebit" onerror="this.style.display='none'">
-    <div class="app-title"><h1>TELEBIT RAN - Ferramenta Huawei</h1><span>Inter-Freq &amp; CA · Placas &amp; Células · Dimensionamento BBP · Conexão física · Baseline · Potência · Relatórios de RanSharing · BKP, CFGFILE e SW · RS_4G</span></div>
+    <div class="app-title"><h1>TELEBIT RAN - Ferramenta Huawei</h1><span>Inter-Freq &amp; CA · Placas &amp; Células · Dimensionamento BBP · Conexão física · Baseline · Potência · Relatórios de RanSharing · BKP, CFGFILE e SW · RS_4G · Planilha SRAN20</span></div>
     <div class="app-ne"><label for="histQuick" class="muted" style="color:#cfd5e2">Site:</label><select id="histQuick" aria-label="Abrir site do histórico"><option value="">— histórico —</option></select><span id="neLbl"></span></div>
   </div>
   <nav class="app-tabs" role="tablist" aria-label="Ferramentas">
@@ -565,6 +565,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
     <button type="button" class="app-tab" role="tab" id="tab-doc" aria-controls="pane-doc" aria-selected="false"><span class="tn">8</span>Documentação lógica<span class="bdg" id="bdg-doc"></span></button>
     <button type="button" class="app-tab" role="tab" id="tab-rs" aria-controls="pane-rs" aria-selected="false"><span class="tn">9</span>Relatórios de RanSharing<span class="bdg" id="bdg-rs"></span></button>
     <button type="button" class="app-tab" role="tab" id="tab-rs4g" aria-controls="pane-rs4g" aria-selected="false"><span class="tn">10</span>RS_4G<span class="bdg" id="bdg-rs4g"></span></button>
+    <button type="button" class="app-tab" role="tab" id="tab-s20" aria-controls="pane-s20" aria-selected="false"><span class="tn">11</span>Planilha SRAN20<span class="bdg" id="bdg-s20"></span></button>
   </nav>
 </header>
 
@@ -1608,7 +1609,7 @@ MOD NRDUCELLPUSCH:NRDUCELLID=11,ULSMARTPREALLOCATIONDUR=250;
       <div class="doc-grid"><div class="doc-field"><label>BULKLOAD (.xlsm)</label><input type="file" id="docBulkFile" accept=".xlsm,.xlsx"></div><div class="doc-field"><label>CDD (.xlsx)</label><input type="file" id="docCddFile" accept=".xlsx"></div></div>
     </div>
     <div class="card"><h2><span class="n">3</span>Prévia do que será preenchido</h2><div id="docPreview" class="doc-table"></div></div>
-    <div class="card"><h2><span class="n">4</span>Emitir documentação</h2><div class="doc-actions"><button class="primary" id="docGenerate" type="button">Gerar BULKLOAD + CDD</button><button class="ghost" id="docBulkOnly" type="button">Somente BULKLOAD</button><button class="ghost" id="docCddOnly" type="button">Somente CDD</button></div><div id="docMsg" class="doc-status"></div></div>
+    <div class="card"><h2><span class="n">4</span>Emitir documentação</h2><div class="doc-actions"><button class="primary" id="docGenerate" type="button">Gerar BULKLOAD + CDD</button><button class="ghost" id="docBulkOnly" type="button">Somente BULKLOAD</button><button class="ghost" id="docCddOnly" type="button">Somente CDD</button></div><div class="doc-logs" style="margin-top:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px"><label style="display:flex;gap:8px;align-items:center;font-weight:600;cursor:pointer"><input type="checkbox" id="docLogs" checked style="width:auto"> Coletar também os <b>Logs</b> do site (TXT) e baixar junto com o BULKLOAD / CDD</label><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px"><label for="docLogKind" class="muted" style="font-size:13px">Lista de comandos</label><select id="docLogKind" style="width:auto"><option value="AUTO">Automático (pelo Product Type do LST NODE)</option><option>SRAN</option><option>LTE</option><option>WCDMA</option></select></div><p class="muted" style="font-size:12.5px;margin:6px 0 0">Mesma função da aba 2 › BKP › Logs: roda a lista de comandos no MAE (helper conectado na aba Entrada) e gera <span style="font-family:Consolas,monospace">&lt;SITE&gt;_LOGS_&lt;data&gt;.txt</span>. Se a pasta 2026 do OneDrive estiver configurada no BKP, o TXT também é gravado lá. As planilhas saem na hora; o TXT baixa quando a coleta terminar.</p><div id="docLogMsg" class="doc-status" aria-live="polite"></div></div><div id="docMsg" class="doc-status"></div></div>
   </div>
 
 <!-- ================= ABA 7 — POTÊNCIA ================= -->
@@ -1678,6 +1679,9 @@ MOD NRDUCELLPUSCH:NRDUCELLID=11,ULSMARTPREALLOCATIONDUR=250;
 
 <!-- ================= ABA 10 — RS_4G (conteúdo montado por js/rs_4g.js) ================= -->
 <div class="pane scB" id="pane-rs4g" role="tabpanel" aria-labelledby="tab-rs4g" hidden></div>
+
+<!-- ================= ABA 11 — PLANILHA SRAN20 (conteúdo montado por js/sran20.js) ================= -->
+<div class="pane scB" id="pane-s20" role="tabpanel" aria-labelledby="tab-s20" hidden></div>
 
 </main>
 
@@ -4734,7 +4738,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
-  var TABS = ["in", "sw", "ca", "pl", "ph", "pw", "bl", "doc", "rs", "rs4g"];
+  var TABS = ["in", "sw", "ca", "pl", "ph", "pw", "bl", "doc", "rs", "rs4g", "s20"];
   var CA_CMDS = ["DSP CELL:;", "LST EUTRANINTERNFREQ:;", "LST UTRANNFREQ:;", "LST EUTRANINTERFREQNCELL:;", "LST EUTRANEXTERNALCELL:;", "LST PCCFREQCFG:;", "LST SCCFREQCFG:;", "LST ENODEBFUNCTION:;", "LST GNODEBFUNCTION:;", "LST CNOPERATORTA:;", "LST GNBTRACKINGAREA:;"];
   var ALL_CMDS = (window.PL_TOOL.cmds || []).slice();
   CA_CMDS.concat(["LST PDSCHCFG:;", "LST CELLDLPCPDSCHPA:;"]).forEach(function (c) { if (ALL_CMDS.indexOf(c) === -1) ALL_CMDS.push(c); });
@@ -5188,7 +5192,18 @@ function readIds(){var u=$('uniIn'),t=String(u&&u.value||'').replace(/<br\s*\/?>
 var AUTO={};
 function autoIds(){var r=readIds();Object.keys(r).forEach(function(id){var el=$(id);if(!el)return;if(!el.value.trim()||el.value===AUTO[id]){el.value=r[id];AUTO[id]=r[id]}})}
 function dlBlob(blob,name){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},4000)}
-function gen(mode){if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){$('docMsg').className='doc-status err';$('docMsg').textContent='Navegador sem suporte. Use Edge ou Chrome atualizado.';return}if(!check()){$('docMsg').className='doc-status err';$('docMsg').textContent='Preencha os campos obrigatórios destacados antes de gerar.';return}$('docMsg').className='doc-status';$('docMsg').textContent='Gerando a partir dos modelos…';var jobs=[];if(mode!=='cdd')jobs.push(fileBuf('docBulkFile',EMB_BULK).then(function(ab){return tplFill(ab,bulkSheets(),'application/vnd.ms-excel.sheet.macroEnabled.12')}).then(function(b){dlBlob(b,'BULKLOAD_'+val('docSite')+'.xlsm')}));if(mode!=='bulk')jobs.push(fileBuf('docCddFile',EMB_CDD).then(function(ab){return tplFill(ab,cddSheets(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}).then(function(b){dlBlob(b,'CDD_'+val('docSite')+'.xlsx')}));Promise.all(jobs).then(function(){$('docMsg').className='doc-status ok';$('docMsg').textContent='Documentação gerada sobre o modelo original (formatação preservada). Confira os downloads.'}).catch(function(e){$('docMsg').className='doc-status err';$('docMsg').textContent='Falha ao gerar: '+e.message})}
+function gen(mode){if(typeof DecompressionStream==='undefined'||typeof CompressionStream==='undefined'){$('docMsg').className='doc-status err';$('docMsg').textContent='Navegador sem suporte. Use Edge ou Chrome atualizado.';return}if(!check()){$('docMsg').className='doc-status err';$('docMsg').textContent='Preencha os campos obrigatórios destacados antes de gerar.';return}$('docMsg').className='doc-status';$('docMsg').textContent='Gerando a partir dos modelos…';var jobs=[];if(mode!=='cdd')jobs.push(fileBuf('docBulkFile',EMB_BULK).then(function(ab){return tplFill(ab,bulkSheets(),'application/vnd.ms-excel.sheet.macroEnabled.12')}).then(function(b){dlBlob(b,'BULKLOAD_'+val('docSite')+'.xlsm')}));if(mode!=='bulk')jobs.push(fileBuf('docCddFile',EMB_CDD).then(function(ab){return tplFill(ab,cddSheets(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}).then(function(b){dlBlob(b,'CDD_'+val('docSite')+'.xlsx')}));Promise.all(jobs).then(function(){$('docMsg').className='doc-status ok';$('docMsg').textContent='Documentação gerada sobre o modelo original (formatação preservada). Confira os downloads.'}).catch(function(e){$('docMsg').className='doc-status err';$('docMsg').textContent='Falha ao gerar: '+e.message});if($('docLogs').checked)docRunLogs()}
+/* Logs junto com o BULKLOAD / CDD — usa a função Logs da aba 2 › BKP (js/sw_cfgfile.js) */
+var docLogBusy=false;
+function docLogSay(cls,t){$('docLogMsg').className='doc-status'+(cls?' '+cls:'');$('docLogMsg').textContent=t}
+function docRunLogs(){if(docLogBusy){docLogSay('','A coleta dos logs anterior ainda está em andamento — o TXT baixa quando terminar.');return}
+ var api=window.SW_TAB&&window.SW_TAB.collectLogs;if(!api){docLogSay('err','Logs: módulo da aba 2 (BKP, CFGFILE e SW) não carregado.');return}
+ var ne=loadedNe()||val('docSite');if(!ne){docLogSay('err','Logs: nenhum site carregado na aba Entrada.');return}
+ docLogBusy=true;docLogSay('','Logs de '+ne+': iniciando a coleta no MAE…');
+ api(ne,{kind:$('docLogKind').value,onStep:function(s){docLogSay('','Logs de '+s.ne+': '+(s.state==='queued'?'aguardando na fila do helper':s.label)+(s.pct!=null?' '+s.pct+'%':'')+(s.msg?' · '+s.msg:''))}})
+ .then(function(r){docLogSay('ok','Logs de '+r.ne+' coletados: '+(r.files.map(function(f){return f.name}).join(', ')||'sem arquivo')+(r.savedTo?' · gravado em '+r.savedTo:'')+' · TXT baixado junto com as planilhas.')})
+ .catch(function(e){docLogSay('err','Logs não coletados: '+e.message+' (as planilhas foram geradas normalmente).')})
+ .then(function(){docLogBusy=false})}
 $('docGenerate').addEventListener('click',function(){gen('all')});$('docBulkOnly').addEventListener('click',function(){gen('bulk')});$('docCddOnly').addEventListener('click',function(){gen('cdd')});document.querySelectorAll('.scD input,.scD select').forEach(function(x){x.addEventListener('input',check);x.addEventListener('change',check)});document.getElementById('tab-doc').addEventListener('click',function(){autoIds();var d=data();if(!val('docSite')&&d.site)$('docSite').value=d.site;check()});['uniGo','uniSample','btn2'].forEach(function(id){var b=$(id);if(b)b.addEventListener('click',function(){setTimeout(function(){autoIds();check()},50)})});$('uniIn').addEventListener('change',function(){setTimeout(function(){autoIds();check()},50)});autoIds();check();
 /* Site novo carregado na Entrada → a Documentação lógica é refeita com os dados desse site.
    O que não vem da coleta nem da planilha MOU (ex.: OC, Endereço ID fora da MOU) fica vazio. */
@@ -5519,5 +5534,7 @@ PAIRS.forEach(function(p){var src=$(p[0]),dst=$(p[1]);if(!src||!dst)return;
 <script src="mae_exec.js"></script>
 <script src="js/kpi_mae.js"></script>
 <script src="js/sw_cfgfile.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="js/sran20.js"></script>
 </body>
 </html>

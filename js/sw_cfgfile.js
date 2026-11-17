@@ -1136,5 +1136,49 @@
     if (!$("swP-sw").hidden) lsAuto(ne());
   });
   setInterval(function () { conn(); reattach(); if (!pwEdit) pwStatus(); }, 3000);
-  window.SW_TAB = { jobs: function () { return jobs; }, logs: function () { return logs; }, parseLstSoftware: parseLstSoftware, lists: LISTS };
+  // ---------- Logs para outras abas (ex.: Documentação lógica) ----------
+  // Mesma coleta da sub-aba BKP › Logs (LST NODE escolhe a lista + TXT), sem o backup XML.
+  // Grava também na pasta do OneDrive do BKP (se configurada) e baixa o TXT pelo navegador no fim.
+  async function collectLogs(neName, opt) {
+    opt = opt || {};
+    var onStep = typeof opt.onStep === "function" ? opt.onStep : function () {};
+    var s = ready();
+    if (!s.logged) throw new Error("MAE não conectado — conecte no painel “Executar no MAE” da aba Entrada.");
+    var n = clean(neName, "Site");
+    if (!n) throw new Error("Nenhum site carregado para coletar os logs.");
+    var hit = (window.MAE.neList() || []).filter(function (x) { return x.name.toUpperCase() === n.toUpperCase(); })[0];
+    if (hit) n = hit.name;
+    var kind = opt.kind || $("bkKind").value || "AUTO", force = kind === "AUTO" ? "" : kind;
+    var dest = opt.dest != null ? String(opt.dest).trim() : $("bkDest").value.trim();
+    if (dest) {
+      var c = await call("/local/check", { path: dest }).catch(function () { return null; });
+      if (!c || c.status !== 200 || !c.j.ok) dest = "";        // pasta inválida neste PC: só baixa pelo navegador
+    }
+    var steps = [
+      { cmd: "#NODEINFO", label: "LST NODE (escolhe a lista)", force: force },
+      { cmd: "#COLLECT", label: "Coletar logs (TXT)", lists: LISTS, force: force, maxsec: 3600 },
+      { cmd: "#SAVE", label: dest ? "Gravar na pasta do OneDrive" : "Deixar pronto para baixar", dest: dest }
+    ];
+    var v = await startJob(n, "Logs (Documentação lógica)", steps, { kind: "doclog", server: "", item: "logs", dest: dest }, "doclog");
+    var J = jobs[v.id];
+    while (J.v.state === "running" || J.v.state === "queued") {
+      var cur = J.v.steps[Math.max(0, J.v.cur)] || {};
+      onStep({ ne: n, state: J.v.state, label: cur.label || "", pct: cur.pct, msg: cur.msg || "" });
+      await new Promise(function (r) { setTimeout(r, 1500); });       // o poll() geral atualiza J.v
+    }
+    var f = J.v.files || [];
+    if (J.v.state !== "done") {
+      var bad = J.v.steps.filter(function (x) { return x.state === "failed"; })[0] || {};
+      throw new Error("coleta dos logs " + (ST[J.v.state] || ["", J.v.state])[1] + (bad.msg || J.v.note ? ": " + (bad.msg || J.v.note) : ""));
+    }
+    if (opt.download !== false) {
+      for (var i = 0; i < f.length; i++) {
+        await dlFile(J.v.id, f[i].name).catch(function () {});
+        await new Promise(function (r) { setTimeout(r, 600); });
+      }
+    }
+    return { ne: n, id: J.v.id, files: f, savedTo: J.v.savedTo || "" };
+  }
+
+  window.SW_TAB = { jobs: function () { return jobs; }, logs: function () { return logs; }, parseLstSoftware: parseLstSoftware, lists: LISTS, collectLogs: collectLogs };
 })();
