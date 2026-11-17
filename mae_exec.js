@@ -19,7 +19,7 @@
     { id: "pwScript", after: "pwCopy",     name: "Potência · script" },
     { id: "pwRb",     after: "pwCopyRb",   name: "Potência · rollback", label: "▶ Executar rollback" },
     { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true },
-    { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script" }
+    { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script", guard: true }
   ];
   var BATCH = 5;
   var MML_RE = /^[A-Z][A-Z0-9]*\s+[A-Z0-9_]+\s*:.*;$/i;
@@ -94,7 +94,7 @@
   }
 
   // ---------- tela ----------
-  var ov = null, items = [], abort = false, running = false, field = null, ne = "";
+  var ov = null, items = [], abort = false, running = false, field = null, ne = "", stopMsg = "", lastAid = "";
   function openScreen(f, cmds, skipped) {
     field = f; ne = siteName(); abort = false;
     items = cmds.map(function (c, i) { return { idx: i, line: c.line, cmd: c.cmd, st: "pd", msg: "", msg1: "", resp: "" }; });
@@ -156,11 +156,104 @@
       '<span class="mx-er">✖ <b class="mx-er">' + (c.er + c.er2) + '</b> falha(s)</span><span>• <b>' + c.pd + '</b> pendente(s)</span>';
   }
 
+  // ---------- comandos vigiados (só no script RS_4G: field.guard) ----------
+  // CFM CB: não pode falhar → 2ª tentativa com outro NAME → se falhar de novo, pergunta antes de seguir.
+  // DSP APP: só segue com o Application State do eNodeB = Available; senão espera 20 s e consulta de novo.
+  function isGuard(it) { return !!(field && field.guard && /^(CFM\s+CB|DSP\s+APP)\s*:/i.test(it.cmd)); }
+  function sleep(ms) {
+    return new Promise(function (res) {
+      var t0 = Date.now(), h = setInterval(function () { if (abort || Date.now() - t0 >= ms) { clearInterval(h); res(!abort); } }, 250);
+    });
+  }
+  async function runOne(cmd) {
+    var r = await window.MAE.api("/run", { ne: ne, cmds: [cmd], stopOnError: false });
+    if (r[0] && /^REG NE/.test(r[0].cmd)) {
+      if (!r[0].ok) throw new Error("REG NE falhou para " + ne + ": " + retMsg(r[0].resp));
+      r = r.slice(1);
+    }
+    return r[0] || { ok: false, resp: "sem resposta do helper" };
+  }
+  function stamp() { var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; }; return p(d.getDate()) + p(d.getMonth() + 1) + "_" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
+  async function guardCfm(it) {
+    var x = await runOne(it.cmd);
+    it.resp += x.resp || "";
+    if (x.ok) { it.st = "ok"; setRow(it); return true; }
+    var m1 = retMsg(x.resp), m = /NAME\s*=\s*"([^"]*)"/i.exec(it.cmd), base = (m ? m[1] : "Pre_RS").slice(0, 20);
+    var cmd2 = m ? it.cmd.replace(/NAME\s*=\s*"[^"]*"/i, 'NAME="' + base + "_" + stamp() + '"') : it.cmd.replace(/:/, ':NAME="' + base + "_" + stamp() + '",');
+    it.msg = "1ª falhou (" + m1 + ") · tentando " + (/NAME\s*=\s*"[^"]*"/i.exec(cmd2) || [""])[0]; setRow(it);
+    var x2 = await runOne(cmd2);
+    it.resp += "\n----- 2ª tentativa: " + cmd2 + " -----\n" + (x2.resp || "");
+    var tr = $("mxr" + it.idx); if (tr) tr.children[2].textContent = cmd2;
+    if (x2.ok) { it.cmd = cmd2; it.msg1 = m1; it.st = "rt"; setRow(it); window.MAE.log("CFM CB: 1º nome falhou, ok com " + cmd2, "in"); return true; }
+    it.st = "er2"; it.msg = retMsg(x2.resp); setRow(it);
+    var go = confirm("O CFM CB (ponto de rollback) falhou 2 vezes em " + ne + ".\n\n1ª: " + it.cmd + "\n   → " + m1 + "\n2ª: " + cmd2 + "\n   → " + it.msg +
+      "\n\nOK = continuar SEM ponto de rollback\nCancelar = parar a execução aqui");
+    if (!go) stopMsg = "Parado: CFM CB falhou 2 vezes (" + it.msg + ").";
+    return go;
+  }
+  function appState(resp, aid) {
+    var L = String(resp || "").replace(/\r/g, "").replace(/\t/g, "    ").split("\n"), recs = [], i, j;
+    for (i = 0; i < L.length; i++) {
+      if (/application\s+state/i.test(L[i]) && !/=/.test(L[i])) {
+        var h = L[i].trim().split(/\s{2,}/);
+        for (j = i + 1; j < L.length; j++) {
+          var t = L[j].trim(); if (!t || /^-+$/.test(t)) continue;
+          if (/^\(Number|^---|^\+\+\+|^%%|^RETCODE|^To be continued/.test(t)) break;
+          var c = t.split(/\s{2,}/); if (c.length < 2) continue;
+          var o = {}; h.forEach(function (k, x) { o[k.toLowerCase()] = c[x] || ""; }); recs.push(o);
+        }
+        break;
+      }
+    }
+    if (!recs.length) {
+      var cur = null;
+      L.forEach(function (l) {
+        var m = /^\s*([A-Za-z][A-Za-z0-9 ._()\/-]*?)\s+=\s+(.*)$/.exec(l); if (!m) return;
+        var k = m[1].trim().toLowerCase(); if (!cur || cur[k] !== undefined) { cur = {}; recs.push(cur); } cur[k] = m[2].trim();
+      });
+    }
+    var g = function (r, re) { for (var k in r) if (re.test(k)) return r[k]; return ""; };
+    recs = recs.filter(function (r) { return g(r, /application\s+state/) !== ""; });
+    if (!recs.length) return "";
+    var pick = recs.filter(function (r) { return aid && g(r, /application\s+id|^aid$/) === String(aid); })[0] ||
+      recs.filter(function (r) { return Object.keys(r).some(function (k) { return /enodeb/i.test(r[k]); }); })[0] ||
+      (recs.length === 1 ? recs[0] : null);
+    return pick ? g(pick, /application\s+state/) : "";
+  }
+  async function guardApp(it) {
+    var aid = (/AID\s*=\s*(\d+)/i.exec(it.cmd) || [])[1] || lastAid;
+    for (var n = 1; ; n++) {
+      var x = await runOne(it.cmd);
+      it.resp += (it.resp ? "\n----- consulta " + n + " -----\n" : "") + (x.resp || "");
+      var st = x.ok ? appState(x.resp, aid) : "";
+      if (/^available$/i.test(st)) { it.st = "ok"; it.msg = "eNodeB Available" + (n > 1 ? " (" + n + "ª consulta)" : ""); setRow(it); return true; }
+      it.st = "run";
+      it.msg = (x.ok ? "Application State do eNodeB = " + (st || "não identificado") : retMsg(x.resp)) + " · consulta " + n + " · aguardando 20 s…";
+      setRow(it);
+      if (n % 15 === 0 && !confirm("O eNodeB" + (aid ? " (AID " + aid + ")" : "") + " ainda não está Available em " + ne + " após " + n + " consultas (~" + Math.round(n * 20 / 60) + " min).\nÚltimo estado: " + (st || "não identificado") + "\n\nOK = continuar esperando\nCancelar = parar a execução")) {
+        it.st = "er"; it.msg = "eNodeB não ficou Available (" + (st || "?") + ")"; setRow(it);
+        stopMsg = "Parado: eNodeB não ficou Available após " + n + " consultas.";
+        return false;
+      }
+      if (!(await sleep(20000))) { it.st = "pd"; it.msg = ""; setRow(it); return false; }
+    }
+  }
+
   async function runList(list, phase) {
-    for (var i = 0; i < list.length; i += BATCH) {
+    var i = 0;
+    while (i < list.length) {
       if (abort) return false;
-      var part = list.slice(i, i + BATCH);
-      part.forEach(function (it) { it.st = "run"; setRow(it); });
+      if (phase === 1 && isGuard(list[i])) {
+        var g = list[i]; g.st = "run"; setRow(g);
+        var tg = $("mxr" + g.idx); if (tg && !$("mxOnlyFail").checked) tg.scrollIntoView({ block: "nearest" });
+        var go = /^CFM/i.test(g.cmd) ? await guardCfm(g) : await guardApp(g);
+        i++; stats(phase, i, list.length);
+        if (!go) { abort = true; return false; }
+        continue;
+      }
+      var part = [];
+      while (i < list.length && part.length < BATCH && !(phase === 1 && isGuard(list[i]))) part.push(list[i++]);
+      part.forEach(function (it) { it.st = "run"; setRow(it); var m = /^RST\s+APP\s*:.*AID\s*=\s*(\d+)/i.exec(it.cmd); if (m) lastAid = m[1]; });
       var tr = $("mxr" + part[0].idx); if (tr && !$("mxOnlyFail").checked) tr.scrollIntoView({ block: "nearest" });
       var r;
       try {
@@ -180,7 +273,7 @@
         else { if (x.ok) { it.msg1 = it.msg; it.msg = ""; it.st = "rt"; } else { it.st = "er2"; it.msg = retMsg(x.resp); } }
         setRow(it);
       });
-      stats(phase, Math.min(i + BATCH, list.length), list.length);
+      stats(phase, i, list.length);
     }
     return true;
   }
@@ -190,7 +283,7 @@
     if (!s.online || !s.logged) { alert("Conecte no painel \"Executar no MAE\" (aba Entrada) primeiro."); return; }
     for (var w = 0; w < 40 && window.MAE.state().busy; w++) await new Promise(function (r) { setTimeout(r, 250); });
     if (window.MAE.state().busy) { alert("O painel do MAE já está executando algo. Aguarde terminar."); return; }
-    running = true; window.MAE.setBusy(true);
+    running = true; window.MAE.setBusy(true); stopMsg = ""; lastAid = "";
     $("mxGo").disabled = true; $("mxGo").textContent = "Executando…"; $("mxStop").disabled = false; $("mxClose").textContent = "Fechar";
     var t0 = Date.now(), err = null;
     window.MAE.log(field.name + ": executando " + items.length + " comandos em " + ne + "…", "in");
@@ -208,7 +301,7 @@
     $("mxStop").disabled = true; $("mxStop").textContent = "Parar";
     $("mxGo").textContent = "▶ Executar de novo"; $("mxGo").disabled = false;
     $("mxCopyFail").disabled = !(c.er + c.er2); $("mxExport").disabled = false;
-    var head = err ? "✖ " + err.message : abort ? "Interrompido pelo usuário." : "Concluído em " + secs + " s.";
+    var head = err ? "✖ " + err.message : stopMsg ? "✖ " + stopMsg : abort ? "Interrompido pelo usuário." : "Concluído em " + secs + " s.";
     $("mxSite").insertAdjacentHTML("beforeend", '<div style="margin-top:4px" class="' + (err || abort ? "mx-er" : "mx-ok") + '"><b>' + esc(head) + "</b></div>");
     window.MAE.log(field.name + " em " + ne + ": " + c.ok + " ok" + (c.rt ? ", " + c.rt + " ok na 2ª" : "") + ((c.er + c.er2) ? ", " + (c.er + c.er2) + " falha(s)" : "") + " · " + head, (c.er + c.er2) || err ? "er" : "ok");
     if (field.retry && !err && !abort) analyse();

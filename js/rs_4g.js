@@ -382,7 +382,7 @@
     d.upX2 = u2e[x2r.up] || d.upS1;
     d.peer1 = String(nextFree(1500, peerU)); peerU[d.peer1] = 1; d.peer2 = String(nextFree(2300, peerU));
     d.s1Id = String(nextFree(3, s1U)); d.x2Id = String(nextFree(3, x2U));
-    d.wait = "120";
+    d.wait = "20";
     var mm = mmeStore()[M.uf || "_"] || {};
     d.mme1 = mm.ip1 || MME_DEF.ip1; d.mme2 = mm.ip2 || MME_DEF.ip2; M.mmeDefault = !(mm.ip1 || mm.ip2);
     M.def = d; M.p = {};
@@ -411,14 +411,14 @@
     var hr = "// " + new Array(86).join("=");
     add(hr, "// RS_4G · " + M.site + " · gerado em " + now() + " · TELEBIT RAN",
       "// Planilha: " + (MOU ? MOU.file + " (" + new Date(MOU.at).toLocaleDateString("pt-BR") + ")" : "não carregada") + (M.endId ? " · End_ID " + M.endId : "") + (M.uf ? " · " + M.uf + " " + M.city : ""), hr, "");
-    var wait = function () { add("#WAIT " + (parseInt(p.wait, 10) || 120), "DSP APP:;"); };
+    var wait = function () { add("#WAIT " + (parseInt(p.wait, 10) || 20), "// DSP APP vigiado: só segue com o eNodeB Available — senão espera 20 s e consulta de novo", "DSP APP:;"); };
     var rsOn = M.blk.rs && !M.block.length;
     if (M.blk.rs && M.block.length) {
       add("// ⚠ RAN SHARING NÃO GERADO — resolva antes:"); M.block.forEach(function (x) { add("//   - " + x); }); add("");
     }
     if (rsOn) {
       add("// ######################## INÍCIO DO RAN SHARING 4G ########################");
-      if (M.blk.cfm) add('CFM CB:NAME="Pre_RS",AUTORBKSW=DISABLE;');
+      if (M.blk.cfm) add("// CFM CB vigiado: se falhar, repete com outro NAME; se falhar de novo, pergunta antes de seguir", 'CFM CB:NAME="Pre_RS",AUTORBKSW=DISABLE;');
       add("", "LST ENODEBSHARINGMODE:;");
       if (/SHARED_FREQ|shared freq/i.test(M.shareMode)) add("// já está SHARED_FREQ no site");
       else add("MOD ENODEBSHARINGMODE:ENODEBSHARINGMODE=SHARED_FREQ;");
@@ -600,7 +600,7 @@
     '<textarea id="rs4Out" class="r4-out" spellcheck="false"></textarea>' +
     '<div class="row"><button class="primary" type="button" id="rs4Copy">Copiar script</button><button class="ghost" type="button" id="r4Dl">Baixar .txt</button>' +
     '<button class="ghost" type="button" id="r4Regen">↺ Regerar</button><span id="r4OutSt" class="muted" style="font-size:12.5px"></span></div>' +
-    '<p class="muted" style="font-size:12.5px;margin:6px 0 0">Comentários (<code>//</code>) não são enviados ao site. <code>#WAIT</code> é a espera do helper depois do <code>RST APP</code>. Se editar o script à mão, use <b>Regerar</b> para voltar ao calculado.</p></section>';
+    '<p class="muted" style="font-size:12.5px;margin:6px 0 0">Comentários (<code>//</code>) não são enviados ao site. <code>#WAIT</code> é a espera do helper depois do <code>RST APP</code>. No <b>Executar no site</b>, o <code>CFM CB</code> e o <code>DSP APP</code> são vigiados (novo NAME / espera o eNodeB ficar Available). Se editar o script à mão, use <b>Regerar</b> para voltar ao calculado.</p></section>';
 
   $("r4Cmds").textContent = READ_CMDS.join("\n");
   $("r4CmdsCopy").addEventListener("click", function () { copyText(READ_CMDS.join("\n"), this); });
@@ -733,7 +733,7 @@
 
   var PAR = [["mme1", "IP MME 1 VIVO (SIGIP1V4)"], ["mme2", "IP MME 2 VIVO (SIGIP1V4)"], ["peer1", "SCTPPEER ID MME 1"], ["peer2", "SCTPPEER ID MME 2"],
     ["epgS1", "EPGROUP S1_VIVO"], ["epgX2", "EPGROUP x2_VIVO"], ["sctpS1", "SCTPHOST do S1 (mesmo da TIM)"], ["sctpX2", "SCTPHOST do X2"],
-    ["upS1", "UPHOST do S1"], ["upX2", "UPHOST do X2"], ["s1Id", "S1 ID VIVO"], ["x2Id", "X2 ID VIVO"], ["aid", "APP do eNodeB (RST APP AID)"], ["wait", "Espera após RST APP (s)"]];
+    ["upS1", "UPHOST do S1"], ["upX2", "UPHOST do X2"], ["s1Id", "S1 ID VIVO"], ["x2Id", "X2 ID VIVO"], ["aid", "APP do eNodeB (RST APP AID)"], ["wait", "1ª espera após RST APP (s)"]];
   function renderPar() {
     var u = U();
     $("r4Par").innerHTML = (M.mmeDefault ? '<div class="r4-msg wa">IPs do MME VIVO: usando o exemplo do roteiro (10.69.210.140 / 10.69.7.140). Troque pelos da regional — ficam salvos para a UF ' + esc(M.uf || "?") + ".</div>" : "") +
