@@ -363,7 +363,7 @@
   }
   function ffRow(row) { var o = [], last = ""; (row || []).forEach(function (v, i) { if (t0(v)) last = t0(v); o[i] = last; }); return o; }
   function engCands(sheets, site) {
-    var out = [], notes = [], seen = {}, key = core(site), siteSeen = false;
+    var out = [], notes = [], seen = {}, key = core(site), siteSeen = false, sites = [];
     function push(f, op, raw, sh, r, c, lab, hint) {
       var x = engVal(f, raw, hint); if (!x) return false;
       var k = f + "|" + x.v + "|" + op + "|" + sh; if (seen[k]) return true; seen[k] = 1;
@@ -385,7 +385,8 @@
         var data = [];
         for (var r = hr + 1; r < rows.length; r++) if ((rows[r] || []).some(function (x) { return t0(x); })) data.push(r);
         var sel = data;
-        if (siteC >= 0) { var mm = data.filter(function (r) { return key && core(t0(rows[r][siteC])) === key; }); sel = mm; if (!mm.length && data.length) notes.push(sh.name + ": " + site + " não aparece na coluna de site."); }
+        if (siteC >= 0) data.forEach(function (r) { var v = t0(rows[r][siteC]).toUpperCase(); if (v && v !== "-" && !sites.some(function (x) { return core(x) === core(v); })) sites.push(v); });
+        if (siteC >= 0) { var mm = data.filter(function (r) { return key && core(t0(rows[r][siteC])) === key; }); sel = mm; if (!mm.length && data.length && key) notes.push(sh.name + ": " + site + " não aparece na coluna de site."); }
         else if (data.length > 6) { sel = []; notes.push(sh.name + ": tabela com " + data.length + " linhas e sem coluna de site — ignorada."); }
         sel.forEach(function (r) {
           var row = rows[r] || [], rop = opC >= 0 ? (/vivo/i.test(row[opC]) ? "VIVO" : /tim/i.test(row[opC]) ? "TIM" : "") : "";
@@ -405,7 +406,7 @@
         }
       }
     });
-    return { c: out, notes: notes, siteSeen: siteSeen };
+    return { c: out, notes: notes, siteSeen: siteSeen, sites: sites };
   }
   function textRows(txt) {
     return String(txt || "").replace(/\r/g, "").split("\n").map(function (l) {
@@ -470,6 +471,7 @@
     if (ENG) E = engCands(ENG.sheets, S.site);
     if (p.engTxt) { var E2 = engCands([{ name: "colado", rows: textRows(p.engTxt) }], S.site); E.c = E2.c.concat(E.c); E.notes = E.notes.concat(E2.notes); }
     T.eng = E;
+    if (ENG && !E.siteSeen && E.sites.length) T.block.push("A ENG-SI carregada (" + ENG.file + ") é do site " + E.sites.map(canonSite).join(", ") + " e o site escolhido é " + (S.site || "nenhum") + " — escolha o site certo em (a) ou use o botão em (b).");
     var vlanUsed = {}; T.vm.forEach(function (x) { vlanUsed[x.vlan] = x; });
     var nhUsed = {}; T.vm.forEach(function (x) { nhUsed[x.nh] = x; });
     function onSite(f, v) {
@@ -1067,7 +1069,10 @@
     "#pane-rs4g .r4-txv input.chg{border-color:#4f63d8;background:#eef0ff}#pane-rs4g .r4-txv small{grid-column:2;font-weight:400;color:#98a2b3;font-size:11px}",
     "#pane-rs4g .r4-txv small.calc{color:#8a5a00}",
     "#pane-rs4g table.r4t tr.vivo td{background:#f1f3ff}#pane-rs4g table.r4t input.lab{width:190px;border-color:#e3c88a}",
-    "#pane-rs4g .big{font-size:15px;font-weight:700}"
+    "#pane-rs4g .big{font-size:15px;font-weight:700}",
+    "#pane-rs4g .r4-drop{display:flex;flex-direction:column;align-items:center;gap:2px;border:2px dashed #9aa6e8;border-radius:10px;padding:14px 8px;background:#f4f6ff;color:#2c3a9e;cursor:pointer;margin-bottom:6px;text-align:center}",
+    "#pane-rs4g .r4-drop.over{background:#e3e8ff;border-color:#4f63d8}",
+    "#pane-rs4g .r4-sitebig{font:700 16px Consolas,monospace;color:#1d2433}"
   ].join("\n");
   document.head.appendChild(css);
 
@@ -1080,11 +1085,15 @@
     '<p class="muted" style="margin:0 0 4px">Cria a VLAN, o IP de serviço e o S1/X2 da VIVO, os hosts SCTP/UP, as rotas para o core VIVO e testa com PING, um por vez. ' +
     'Placa e ETHport vêm do <b>LST DEVIP</b>; IDs e RTIDX ocupados são pulados; o que já existe no site vira comentário. O RAN Sharing (seções 1 a 7) usa os MMEs e os hosts criados aqui.</p>' +
     '<div class="r4-tx3">' +
-    '<div class="r4-box"><h3>a) Core VIVO — MME e SGW</h3><div id="r4TxGwSt" class="muted" style="font-size:12px"></div>' +
+    '<div class="r4-box"><h3>a) Site e core VIVO — MME e SGW</h3>' +
+    '<div class="row" style="margin-top:0"><input id="r4TxSite" list="r4TxSiteDl" placeholder="site (ex.: SR-CFLL03)" autocomplete="off" style="width:170px;font:13px Consolas,monospace"><datalist id="r4TxSiteDl"></datalist>' +
+    '<button class="primary" type="button" id="r4TxSiteGo">Escolher</button><button class="ghost" type="button" id="r4TxSiteEnt" title="usar o site carregado na aba Entrada">Site da Entrada</button></div>' +
+    '<div id="r4TxGwSt" class="muted" style="font-size:12px"></div>' +
     '<select id="r4TxGrp"></select><div id="r4TxGw"></div>' +
     '<div class="row" style="font-size:12px"><span class="muted">Planilha nova:</span><input type="file" id="r4TxGwFile" accept=".xlsx,.xlsm,.xls,.xlsb"><button class="ghost" type="button" id="r4TxGwDef" title="voltar à planilha embutida">padrão</button></div></div>' +
     '<div class="r4-box"><h3>b) ENG-SI — IPs da VIVO</h3>' +
-    '<div class="row"><input type="file" id="r4TxEngFile" accept=".xlsx,.xlsm,.xls,.xlsb,.csv"></div><div id="r4TxEngSt" class="muted" style="font-size:12px"></div>' +
+    '<label id="r4TxDrop" class="r4-drop"><input type="file" id="r4TxEngFile" accept=".xlsx,.xlsm,.xls,.xlsb,.csv" hidden><span class="big">⬇ Arraste a ENG-SI aqui</span><span class="muted" style="font-size:12px">ou clique para escolher o arquivo</span></label>' +
+    '<div id="r4TxEngSt" class="muted" style="font-size:12px"></div>' +
     '<details style="margin:4px 0"><summary class="muted" style="cursor:pointer;font-size:12.5px">ou colar as linhas da ENG-SI (com o cabeçalho)</summary><textarea id="r4TxEngTxt" placeholder="Cole aqui (do Excel: cabeçalho + linha do site)"></textarea>' +
     '<div class="row"><button class="ghost" type="button" id="r4TxEngGo">Usar colado</button><button class="ghost" type="button" id="r4TxEngClr">Limpar colado</button></div></details>' +
     '<div id="r4TxVals"></div></div>' +
@@ -1298,8 +1307,14 @@
   var TX_PAR = [["sn", "Placa UMPT (SN)"], ["pn", "ETHport (PN)"], ["lpn", "Loopback (PN)"], ["hS1", "SCTPHOST S1 VIVO"], ["hX2", "SCTPHOST X2 VIVO"], ["up", "USERPLANEHOST VIVO"], ["rt0", "1º RTIDX das rotas"]];
   function renderTx() {
     var T = M.tx, p = txP();
+    // a) site
+    if (document.activeElement !== $("r4TxSite")) $("r4TxSite").value = S.site || "";
+    if (S.txDlFor !== TXGW) {
+      S.txDlFor = TXGW; var seenS = {};
+      $("r4TxSiteDl").innerHTML = TXGW.g.map(function (G) { return (G.s || []).filter(function (x) { var k = core(x[0]); if (seenS[k]) return false; return (seenS[k] = 1); }).map(function (x) { return '<option value="' + esc(x[0]) + '">' + esc([x[1], x[3]].filter(Boolean).join(" · ")) + "</option>"; }).join(""); }).join("");
+    }
     // a) gateways
-    $("r4TxGwSt").innerHTML = esc(TXGW.file) + " · " + TXGW.g.length + " grupos" + (T.gi ? " · " + chip(T.gi.amb ? "wa" : "ok", T.gi.why) : " · " + chip("er", "grupo não identificado"));
+    $("r4TxGwSt").innerHTML = (S.site ? '<div class="r4-sitebig">' + esc(S.site) + (T.gi && T.gi.city ? ' <span class="muted" style="font:12px Segoe UI,Arial">' + esc(T.gi.city + "/" + T.gi.uf) + "</span>" : "") + "</div>" : chip("wa", "escolha o site")) + esc(TXGW.file) + " · " + TXGW.g.length + " grupos" + (T.gi ? " · " + chip(T.gi.amb ? "wa" : "ok", T.gi.why) : " · " + chip("er", "grupo não identificado"));
     var sel = T.gi ? T.gi.i : -1;
     $("r4TxGrp").innerHTML = '<option value="">' + (T.gi && p.grp == null ? "(automático) " : "") + "— escolher grupo —</option>" +
       TXGW.g.map(function (G, i) { return '<option value="' + i + '"' + (i === sel ? " selected" : "") + ">" + esc(gwLabel(i)) + "</option>"; }).join("");
@@ -1307,7 +1322,9 @@
     // b) ENG-SI
     var E = T.eng;
     $("r4TxEngSt").innerHTML = (ENG ? chip(E.siteSeen ? "ok" : "wa", E.siteSeen ? "site no arquivo" : "site não aparece no arquivo") + " " + esc(ENG.file) : chip("wa", "ENG-SI não carregada")) +
-      (p.engTxt ? " " + chip("in", "colado") : "") + " · " + E.c.length + " valor(es) achados" + (E.notes.length ? '<div style="margin-top:3px">' + E.notes.map(esc).join("<br>") + "</div>" : "");
+      (p.engTxt ? " " + chip("in", "colado") : "") + " · " + E.c.length + " valor(es) achados para " + esc(S.site || "—") + (E.notes.length ? '<div style="margin-top:3px">' + E.notes.map(esc).join("<br>") + "</div>" : "") +
+      (ENG && !E.siteSeen && E.sites.length ? '<div class="row">' + E.sites.slice(0, 4).map(canonSite).map(function (x) { return '<button class="primary" type="button" data-usesite="' + esc(x) + '">Usar o site ' + esc(x) + " da ENG-SI</button>"; }).join("") + "</div>" : "");
+    $("r4TxEngSt").querySelectorAll("[data-usesite]").forEach(function (b) { b.addEventListener("click", function () { setSite(canonSite(this.getAttribute("data-usesite"))); }); });
     var dl = "";
     $("r4TxVals").innerHTML = '<div class="r4-txv">' + TX_V.map(function (x) {
       var k = x[0], c = E.c.filter(function (y) { return y.f === k; });
@@ -1384,9 +1401,35 @@
     $(stEl).innerHTML = chip("in", "lendo…") + " " + esc(f.name);
     f.arrayBuffer().then(function (ab) { return fn(ab, f.name); }).catch(function (e) { $(stEl).innerHTML = chip("er", "erro") + " " + esc(e.message); }).then(function () { inp.value = ""; });
   }
-  $("r4TxEngFile").addEventListener("change", function () {
-    readFile(this, function (ab, n) { ENG = parseEngBook(ab, n); idbSet("engsi", ENG).catch(function () {}); render(); }, "r4TxEngSt");
+  // nome "oficial" do site: o da planilha de Core (SR-...), senão o da ENG-SI
+  function canonSite(v) {
+    var k = core(v), hit = "";
+    TXGW.g.forEach(function (G) { (G.s || []).forEach(function (x) { if (!hit && core(x[0]) === k) hit = x[0]; }); });
+    return hit || v;
+  }
+  function engLoaded(ab, n) {
+    ENG = parseEngBook(ab, n); idbSet("engsi", ENG).catch(function () {});
+    var E = engCands(ENG.sheets, S.site);
+    if (E.sites.length === 1 && !S.site) setSite(canonSite(E.sites[0]));   // sem site escolhido: usa o da ENG-SI
+    else render();
+  }
+  $("r4TxEngFile").addEventListener("change", function () { readFile(this, engLoaded, "r4TxEngSt"); });
+  var drop = $("r4TxDrop");
+  ["dragenter", "dragover"].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function (e) {
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return;
+    $("r4TxEngSt").innerHTML = chip("in", "lendo…") + " " + esc(f.name);
+    f.arrayBuffer().then(function (ab) { engLoaded(ab, f.name); }).catch(function (er) { $("r4TxEngSt").innerHTML = chip("er", "erro") + " " + esc(er.message); });
   });
+  function txPickSite() { var v = $("r4TxSite").value.trim(); if (v) setSite(v); }
+  $("r4TxSiteGo").addEventListener("click", txPickSite);
+  $("r4TxSite").addEventListener("keydown", function (e) { if (e.key === "Enter") txPickSite(); });
+  $("r4TxSite").addEventListener("input", function () {
+    var v = this.value.trim().toUpperCase(), opts = $("r4TxSiteDl").options;
+    for (var i = 0; i < opts.length; i++) if (opts[i].value.toUpperCase() === v) { setSite(v); return; }
+  });
+  $("r4TxSiteEnt").addEventListener("click", function () { var n = loadedSite(); if (n) setSite(n); else $("r4TxGwSt").insertAdjacentHTML("afterbegin", chip("wa", "nenhum site carregado na Entrada") + " "); });
   $("r4TxGwFile").addEventListener("change", function () {
     readFile(this, function (ab, n) { TXGW = parseGwBook(ab, n); lsSet(LS_TXGW, TXGW); render(); }, "r4TxGwSt");
   });
