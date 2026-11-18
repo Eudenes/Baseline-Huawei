@@ -750,7 +750,7 @@ var SRAN3G = (function () {
       'O que não existe no SRAN V100R020 (ex.: <code>USB</code>, <code>PORTPOLICY</code>, <code>SINGLEIPSWITCH</code>) sai — a lista de classes e parâmetros válidos é a do modelo de NE do próprio FullScript.</li>' +
       '<li><b>Do modelo</b>: placa LTE, RRUs/cadeias/setores/BASEBANDEQM do LTE, todo o eNodeBFunction, S1/X2 (SCTPHOST, USERPLANEHOST, EPGROUP, MME), e o que é próprio do SRAN (NE, NODE, APPLICATION, UDT, LANSW…). ' +
       'Se o slot da placa LTE do modelo já tiver placa 3G no site, a placa LTE vai para o primeiro slot livre (e as cadeias, CPRI e BASEBANDEQM do LTE acompanham).</li>' +
-      '<li><b>Do eRPD</b>: nome e ID do eNodeB, nome/ID/PCI/RSI/EARFCN/banda/BW das células, TAC, e o NB-IoT (Prb pela tabela EARFCN, igual à aba 11). Célula do modelo que não está no eRPD sai.</li>' +
+      '<li><b>Do eRPD</b>: nome e ID do eNodeB, nome/ID/PCI/RSI/EARFCN/banda/BW das células, TAC, e o NB-IoT (Prb pela tabela EARFCN, igual à aba 11 · New Site). Célula do modelo que não está no eRPD sai.</li>' +
       '<li><b>Da ENG-SI</b> (PROJETO LÓGICO AUTOMÁTICO): IP de infra e máscara, gateway, VLAN e loopback S1/X2 do LTE. A gerência (OMCH) do SRAN continua a do 3G. A aba PROJETO LÓGICO (3G) serve só para conferir o 3G do backup e achar o nome SR- do site.</li>' +
       '<li><b>Rota padrão</b>: fica a do LTE. Se o 3G usava rota padrão, os destinos dele (RNC, relógio IP, MAE) que ficariam sem rota ganham rota /32 pelo gateway do 3G.</li>' +
       '<li>O pacote sai com o <code>ScriptNeModel</code> e o <code>version.properties</code> do modelo, <code>manifest.xml</code>/<code>scriptcfg.xml</code> novos (IP = OMCH do site) e o XML com CRC SHA-256.</li>' +
@@ -838,7 +838,7 @@ var SRAN3G = (function () {
       var r = await window.SW_TAB.backupXml(ne, function (v) {
         var cur = v.steps[Math.max(0, v.cur)] || {};
         $("s3gBkpSt").textContent = ne + " · " + (cur.label || cur.cmd || "") + (cur.pct != null ? " " + cur.pct + "%" : "") + (cur.msg ? " · " + cur.msg : "");
-      });
+      }, { title: "Backup XML (3G → SRAN)", check: function (K) { return K.kind === "LTE" ? ne + " é 4G puro (" + (K.pt || "LTE") + "): use a opção “4G puro → SRAN”." : ""; } });
       var xs = await expand(r.name, r.bytes);
       if (!xs.length) throw new Error("O arquivo do backup (" + r.name + ") não é um XML de configuração.");
       await setBackup(xs[0].text, "MAE · " + r.name);
@@ -887,7 +887,7 @@ var SRAN3G = (function () {
     return out;
   }
   dropZone("s3gDropX", "s3gFileX", async function (files) {
-    if (!window.XLSX || !window.SRAN20Core) { $("s3gXInfo").innerHTML = '<div class="s4-msg er">SheetJS/aba 11 não carregados nesta página.</div>'; return; }
+    if (!window.XLSX || !window.SRAN20Core) { $("s3gXInfo").innerHTML = '<div class="s4-msg er">SheetJS/aba 11 (New Site) não carregados nesta página.</div>'; return; }
     var notes = [];
     for (var i = 0; i < files.length; i++) {
       var f = files[i];

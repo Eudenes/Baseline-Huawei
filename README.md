@@ -98,6 +98,12 @@ da conexão feita no painel **Executar no MAE** da aba Entrada. Sub-abas: **Soft
 - **CFGFILE** — envia um XML ao servidor de arquivos (FTP ou SFTP, pelo helper), confere o tamanho e só
   então libera o `DLD CFGFILE`. O servidor do **upload** (padrão `10.220.30.9`, SFTP 22) e o IP que vai
   **no comando** (padrão `10.220.4.134`, visto só pelos sites) são campos diferentes.
+- **3G puro (WCDMA)** — antes de todo ULD/DLD (BKP XML, DLD CFGFILE, DLD/SPL SOFTWARE e o backup das abas 12)
+  a aba roda `LST NODE:;` no site. Product Type com **WCDMA** e sem LTE = 3G puro: o comando vai com
+  `IP="10.220.30.134"`, `USR="ftpuser"` e o lado do PC (upload, conferência e renomeio do arquivo) usa o mesmo
+  servidor por SFTP 22 — mesma senha e mesmo DIR. Os dois valores ficam na barra **📡 3G puro (WCDMA)** no topo da aba.
+  No CFGFILE o XML é enviado para o servidor certo conforme o site no topo da aba; se o site do DLD não bater
+  com o servidor onde o XML está, a aba pede para enviar de novo.
 - **BKP** — `LST NODE:;` escolhe a lista de logs pelo *Product Type* (tem WCDMA → WCDMA; tem LTE → LTE;
   senão → SRAN; dá para forçar), roda a lista e salva `<SITE>_LOGS_<data>.txt`; depois
   `BKP CFGFILE:ENCRYPTMODE=UNENCRYPTED;` → `LST CFGFILE:;` → `SET FTPSCLT` → `ULD CFGFILE` para
@@ -169,7 +175,7 @@ Para colocar o LTE na mesma BBU de um site 3G puro, já que o MAE não converte 
 
 - o **backup do site 3G** — feito pela própria aba (botão *Fazer backup pelo MAE*, que usa a sub-aba BKP da aba 2:
   `BKP CFGFILE` + `ULD CFGFILE`) ou solto como arquivo (`…BKPFileOf_swmengine…tar.gz`, `NodeBCfg.xml`, `CFGDATA.XML`);
-- o **eRPD** (células LTE) e a **ENG-SI** (IPs do LTE, aba PROJETO LÓGICO AUTOMÁTICO) — os mesmos parsers da aba 11;
+- o **eRPD** (células LTE) e a **ENG-SI** (IPs do LTE, aba PROJETO LÓGICO AUTOMÁTICO) — os mesmos parsers da aba 11 (New Site);
 - um **site SRAN modelo** 3G+4G (padrão embutido: FullScript do SR-MFRP01; dá para usar outro).
 
 Sai o `NaoDeletar_FullScript_RuleCheckSuccessed_….zip` (FullExport com CRC + `ScriptNeModel` + `manifest.xml`/`scriptcfg.xml`)
@@ -205,6 +211,9 @@ Converte o backup de configuração da BBU no formato **4G puro** (eNodeB só LT
 `3900LTEDATA`) para o formato **SRAN** (producttype 118, `3900BTSDATA`) — o arquivo que o MAE gerava antes
 de a Huawei descontinuar a função. Com o SRAN carregado (`DLD CFGFILE`) o site passa a trabalhar no modelo SRAN (multimodo).
 
+- **Fazer backup pelo MAE**: digite um ou vários NEs (separados por vírgula) e a aba faz `BKP CFGFILE` + `ULD CFGFILE`
+  pela sub-aba BKP da aba 2 (mesmo servidor e senha); cada backup entra direto na lista de conversão.
+  Site 3G puro é recusado antes do backup (use a opção 3G puro + LTE).
 - Arraste um ou vários backups: o pacote `…BKPFileOf_swmengine…tar.gz`, o `ENBCFG.XML.gz`, o `ENBCFG.XML`
   ou um `.zip` com eles. Tudo roda no navegador (nada sai do PC).
 - Saída: `<NENAME>.xml` por site (ou um `.zip` com todos), com o `CRC` (SHA-256) no fim como o MAE grava.
