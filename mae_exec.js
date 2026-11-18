@@ -166,7 +166,7 @@
   function isLabel(it) { return /^MOD\s+DEVIP\s*:.*USERLABEL\s*=/i.test(it.cmd); }
   function isGuard(it) {
     if (!field || !field.guard) return false;
-    if (field.guard === "tx") return isPing(it) || isLabel(it);
+    if (field.guard === "tx") return isPing(it) || isLabel(it) || /^CFM\s+CB\s*:/i.test(it.cmd);
     return /^(CFM\s+CB|DSP\s+APP)\s*:/i.test(it.cmd);
   }
   function pingParse(resp) {

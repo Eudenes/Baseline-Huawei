@@ -636,6 +636,7 @@
     add(hr, "// TX VIVO · " + T.site + " · gerado em " + now() + " · TELEBIT RAN", "// Core VIVO: " + (T.gi ? gwLabel(T.gi.i) + " (" + T.gi.why + ")" : "—"),
       "// Placa SN=" + P.sn + " · ETHport " + P.pn + (T.ref ? " (do LST DEVIP: " + T.ref.ip + (T.ref.label ? " · " + T.ref.label : "") + ")" : ""), hr, "");
     var labs = T.lab.filter(function (x) { return x.on && x.txt && x.ok; });
+    if (T.ok || labs.length) add("// Ponto de rollback antes de mexer no TX (se falhar, o Executar tenta outro NAME; se falhar de novo, pergunta)", 'CFM CB:NAME="TX_RS",AUTORBKSW=DISABLE;', "");
     if (labs.length) {
       add("// USER LABEL dos IPs sem identificação (confirmado na tela — o Executar pede confirmação de novo)");
       labs.forEach(function (x) { var d = x.d; add("MOD DEVIP:" + loc(d) + "SN=" + d.sn + ",SBT=" + sbtCode(d.sbt) + ",PT=" + ptCode(d.pt) + ",PN=" + d.pn + ',IP="' + d.ip + '",USERLABEL="' + x.txt + '";'); });
