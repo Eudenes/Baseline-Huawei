@@ -158,3 +158,71 @@ Rotas novas do helper:
 8. **BKP**: **Procurar a pasta 2026 no OneDrive** → **Testar pasta** → **Fazer backup** → confira
    `<SITE>_LOGS_….txt` e `<SITE>_CFGDATA.XML` na subpasta do site e o arquivo renomeado no servidor.
 
+
+## 3G/4G puro → SRAN (aba 12)
+
+A aba tem duas opções: **3G puro + LTE → SRAN** (FullScript do MAE) e **4G puro → SRAN** (conversão do backup).
+
+### 3G puro + LTE → SRAN
+
+Para colocar o LTE na mesma BBU de um site 3G puro, já que o MAE não converte mais 3G em SRAN. Junta:
+
+- o **backup do site 3G** — feito pela própria aba (botão *Fazer backup pelo MAE*, que usa a sub-aba BKP da aba 2:
+  `BKP CFGFILE` + `ULD CFGFILE`) ou solto como arquivo (`…BKPFileOf_swmengine…tar.gz`, `NodeBCfg.xml`, `CFGDATA.XML`);
+- o **eRPD** (células LTE) e a **ENG-SI** (IPs do LTE, aba PROJETO LÓGICO AUTOMÁTICO) — os mesmos parsers da aba 11;
+- um **site SRAN modelo** 3G+4G (padrão embutido: FullScript do SR-MFRP01; dá para usar outro).
+
+Sai o `NaoDeletar_FullScript_RuleCheckSuccessed_….zip` (FullExport com CRC + `ScriptNeModel` + `manifest.xml`/`scriptcfg.xml`)
+para importar no MAE, e o XML sozinho se preferir.
+
+O resultado segue o padrão dos sites já integrados e funcionando (comparado com o XML do site no ar em 7 sites:
+~99% dos atributos do NODE e 100% do NODEBFUNCTION iguais ao do site integrado).
+
+- **Hardware 3G na numeração do modelo**: RRU, cadeia (RCN = SRN), setor e SECTOREQM do 3G ficam com os números do
+  modelo (60, 61, 62…), TX/RX e nomes do modelo; cada cadeia chega na mesma placa/porta do backup (HSN/HPN);
+  o BASEBANDEQM do UMTS é o do modelo com as placas 3G do site. As células 3G apontam para os novos SECTOREQM/BASEBANDEQM.
+  Se a quantidade de RRUs do site for diferente da do modelo (ou houver RRU em cascata), fica a numeração do backup (com aviso).
+- **Placas**: as do backup + a placa LTE do modelo. Se o slot dela estiver ocupado, vai para o slot livre (ordem 4, 3, 5, 0, 2, 1).
+  Cadeia 3G ligada num slot sem BBP no backup (placa de outra BBU) ganha uma BBP no molde da placa LTE do modelo (com aviso).
+- **Transmissão 3G**: IPs do site (Iub, OMCH, gateway, VLAN, rotas) nos objetos do modelo — IPPATH (6 caminhos e DSCP do
+  modelo), SCTPLNK do Iub (temporizadores do modelo), OMCH (PEERMASK do modelo), DEVIP com os rótulos do modelo.
+  Rotas do 3G renumeradas em sequência depois das do LTE, com a descrição do modelo. Rota padrão fica a do LTE; destinos
+  do 3G que dependiam da rota padrão do 3G ganham rota /32 pelo gateway do 3G.
+- **Relógio**: o do modelo (GNSS/TASM do SRAN). Opção para manter o do site (TASM, IPCLKLNK, GPS).
+- **Não entram do backup**: RET/RETSUBUNIT/RETDEVICEDATA (refeitos em campo com a varredura de RET), E1T1/E1T1BEAR, LR,
+  DL/ULFLOWCTRLPARA, FTPCLTPORT, NODEBMULTICELLGRP. ETHPORT/PHYPORT/CABINET/ALMPORT/LOCATION ficam os do modelo.
+- **NODEBFUNCTION**: parâmetros do NodeB do modelo; células 3G = a célula do modelo como base + tudo da célula do site
+  (identidade, UARFCN, PSC, potência, LAC/SAC/RAC…), exceto alguns parâmetros de algoritmo que ficam os do modelo
+  (RADIUS, ICMODE/TURBOIC, HSPAUSERNUMEXT, CQIADJALGOFNONCON, HSDPAFULLBUFTHROUTHD…). Opção para manter tudo do backup.
+- **Do modelo**: placa/RRUs/setores do LTE, eNodeBFunction, S1/X2 e o que é próprio do SRAN.
+- **Do eRPD/ENG-SI**: nomes e IDs, células (PCI, RSI, EARFCN, banda, BW), TAC, NB-IoT, IPs/VLAN/loopback do LTE.
+  A gerência (OMCH) continua a do 3G. Célula do modelo fora do eRPD sai.
+- Classes e parâmetros aceitos: modelo de NE do MAE (BTS3900 V100R020C10SPC270) que vem no próprio FullScript.
+
+### 4G puro → SRAN
+
+Converte o backup de configuração da BBU no formato **4G puro** (eNodeB só LTE: `ENBCFG.XML`, producttype 3,
+`3900LTEDATA`) para o formato **SRAN** (producttype 118, `3900BTSDATA`) — o arquivo que o MAE gerava antes
+de a Huawei descontinuar a função. Com o SRAN carregado (`DLD CFGFILE`) o site passa a trabalhar no modelo SRAN (multimodo).
+
+- Arraste um ou vários backups: o pacote `…BKPFileOf_swmengine…tar.gz`, o `ENBCFG.XML.gz`, o `ENBCFG.XML`
+  ou um `.zip` com eles. Tudo roda no navegador (nada sai do PC).
+- Saída: `<NENAME>.xml` por site (ou um `.zip` com todos), com o `CRC` (SHA-256) no fim como o MAE grava.
+- **Enviar p/ CFGFILE** abre a aba 2 → CFGFILE com o XML já escolhido para o upload e o `DLD CFGFILE`.
+- Se um SRAN feito pelo MAE do mesmo site for solto junto, a aba compara os dois (MOs, parâmetros e valores).
+
+O que a conversão faz (regras tiradas de 8 sites — RAN18 SPC220, RAN19 SPC260, RAN20 SPC270 — em que a saída
+bate 100% com o SRAN do MAE):
+
+- cabeçalho `producttype` 3 → 118, `3900LTEDATA` → `3900BTSDATA`, bloco `NODE` vira `NODENAME=<site>`,
+  `inventoryData` vazio e `CRC` no fim;
+- MO vazio, parâmetro vazio, comentários e `objId` saem; datas `AAAA-MM-DD`; IPv6 por extenso;
+- saem as classes `LicenseControlStrategy` e `eUCommCellSectorEqm`, os parâmetros só de leitura/versão e os
+  que dependem de outro (ex.: `ALMPORT.AID` só com `SW=ON`, `TASM.SYNMODE` só com sincronismo de frequência);
+- `NODE`: `PRODUCTTYPE=118`, `WM=0`, `WMEXTENSION=0`; `APPLICATION.AN` = `eNodeB`;
+- entram as `ETHPORT` 2 e 3 da UMPT (`PORTID = SN×10+PN`) com seus `RSCGRP`, o `RSCGRP` do túnel quando há
+  rota por túnel, `CPSWITCH`, `UDPPING`, `SINGLEIPSWITCH` (até RAN19) e a tabela `UDT` padrão do SRAN;
+- classes e parâmetros na ordem do SRAN do MAE da mesma versão.
+
+O núcleo (`SRANCONV` em `js/sran_conv.js`) não usa DOM e roda também no node:
+`node -e "const C=require('./js/sran_conv.js'); const r=C.convert(require('fs').readFileSync('ENBCFG.XML','latin1')); require('fs').writeFileSync(r.fileName, Buffer.from(C.finish(r.body).bytes))"`

@@ -1180,5 +1180,29 @@
     return { ne: n, id: J.v.id, files: f, savedTo: J.v.savedTo || "" };
   }
 
-  window.SW_TAB = { jobs: function () { return jobs; }, logs: function () { return logs; }, parseLstSoftware: parseLstSoftware, lists: LISTS, collectLogs: collectLogs };
+  // Backup XML de um NE para outra aba (3G puro → SRAN): BKP CFGFILE + ULD CFGFILE com os dados da sub-aba BKP
+  // (servidor, usuário, senha, pasta). A tarefa aparece aqui na lista; o XML não é baixado sozinho — volta para quem pediu.
+  async function backupXml(neName, onStep) {
+    var s = ready();
+    if (!s.logged) throw new Error("Conecte no painel “Executar no MAE” da aba Entrada (usuário e senha do MAE).");
+    var o = bkVals(true); o.logs = false; o.xml = true; o.dest = "";
+    var nes = window.MAE.neList() || [], hit = nes.filter(function (x) { return x.name.toUpperCase() === String(neName).toUpperCase(); })[0];
+    if (hit) neName = hit.name;
+    var v = await startJob(neName, "Backup XML (3G → SRAN)", bkSteps(o, neName), { kind: "bkp", server: o.ip, item: "XML", dest: "" }, "bkp");
+    bkGot[v.id] = 1;
+    for (;;) {
+      await new Promise(function (r) { setTimeout(r, 1500); });
+      var J = jobs[v.id]; if (!J) continue;
+      if (onStep) { try { onStep(J.v); } catch (e) {} }
+      if (J.v.state === "done") break;
+      if (J.v.state === "failed" || J.v.state === "canceled")
+        throw new Error("Backup de " + neName + " não terminou: " + ((J.v.steps.filter(function (x) { return x.state === "failed"; })[0] || {}).msg || J.v.note || J.v.state));
+    }
+    var f = (jobs[v.id].v.files || []).filter(function (x) { return /\.xml$/i.test(x.name); })[0];
+    if (!f) throw new Error("O backup terminou, mas o helper não devolveu o XML.");
+    var r = await fetch(HELPER + "/job/file?id=" + encodeURIComponent(v.id) + "&name=" + encodeURIComponent(f.name));
+    if (!r.ok) throw new Error("Não consegui baixar o XML do helper (" + r.status + ").");
+    return { name: f.name, ne: neName, bytes: new Uint8Array(await r.arrayBuffer()) };
+  }
+  window.SW_TAB = { jobs: function () { return jobs; }, logs: function () { return logs; }, parseLstSoftware: parseLstSoftware, lists: LISTS, collectLogs: collectLogs, pickFile: pickFile, backupXml: backupXml };
 })();
