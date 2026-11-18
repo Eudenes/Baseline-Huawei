@@ -235,7 +235,7 @@
     var rc = /RETCODE\s*=\s*(\d+)\s*([^\n]*)/.exec(t);
     if ((m = /(\d+)\s*packet\(?s?\)?\s*transmitted/i.exec(t)) || (m = /sent\s*(?:packets?)?\s*(?:number)?\s*[=:]\s*(\d+)/i.exec(t))) r.sent = +m[1];
     if ((m = /(\d+)\s*packet\(?s?\)?\s*received/i.exec(t)) || (m = /received\s*(?:packets?)?\s*(?:number)?\s*[=:]\s*(\d+)/i.exec(t))) r.recv = +m[1];
-    if ((m = /(\d+(?:\.\d+)?)\s*%\s*(?:packet\s*)?loss/i.exec(t)) || (m = /loss[^\d\n]{0,25}?(\d+(?:\.\d+)?)\s*%/i.exec(t)) || (m = /los[st]\s*(?:ratio|rate)[^\d\n]*?(\d+(?:\.\d+)?)/i.exec(t))) r.loss = +m[1];
+    if ((m = /percent\s*(\d+(?:\.\d+)?)\s*%?\s*packets?\s*los[st]/i.exec(t)) || (m = /(\d+(?:\.\d+)?)\s*%\s*(?:packet\s*)?loss/i.exec(t)) || (m = /loss[^\d\n]{0,25}?(\d+(?:\.\d+)?)\s*%/i.exec(t)) || (m = /los[st]\s*(?:ratio|rate)[^\d\n]*?(\d+(?:\.\d+)?)/i.exec(t))) r.loss = +m[1];
     if ((m = /min\/avg\/max\s*=\s*[\d.]+\/([\d.]+)\//i.exec(t)) || (m = /average[^\d\n]{0,20}([\d.]+)/i.exec(t))) r.avg = +m[1];
     if (r.sent == null || r.recv == null) {                       // tabela "Sent  Received  Loss"
       parseBody(t).forEach(function (row) {
@@ -251,7 +251,9 @@
     if (r.recv == null && r.sent != null && r.loss != null) r.recv = Math.round(r.sent * (100 - r.loss) / 100);
     if (r.recv == null && (replies || tos)) { r.recv = replies; if (r.sent == null) r.sent = replies + tos; }
     if (r.loss == null && r.sent) r.loss = Math.round((r.sent - r.recv) * 1000 / r.sent) / 10;
-    r.known = r.recv != null;
+    // fim do teste: estatística ou "N reports in total" (o MAE manda um relatório por resposta)
+    r.done = /ping statistics|packet\(?s?\)?\s*transmitted|reports? in total|sent\s*packets?\s*[=:]/i.test(t);
+    r.known = r.recv != null && r.done;
     if (rc && rc[1] !== "0") { r.known = true; r.ok = false; r.msg = "NOK · " + rc[1] + " " + rc[2].trim(); return r; }
     if (/\[TIMEOUT/.test(t)) { r.known = r.known || false; }
     if (!r.known) { r.msg = "resultado do PING não reconhecido — veja a resposta no log"; return r; }
@@ -315,54 +317,88 @@
   // ---------- ENG-SI (IPs VIVO) ----------
   function t0(v) { return v == null ? "" : String(v).trim(); }
   function colL(c) { var s = ""; c++; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
-  function fieldOf(h) {
-    var t = t0(h).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  function nt(h) { return t0(h).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " "); }
+  // h = cabeçalho da coluna; ctx = cabeçalho de grupo acima (ex.: "Service (S1/X2)", "INFRA") — ENG-SI tem 2 níveis
+  function fieldOf(h, ctx) {
+    var t = nt(h), c = nt(ctx);
     if (!t || t.length > 60 || /^[\d.\/\s]+$/.test(t)) return null;
-    var op = /vivo/.test(t) ? "VIVO" : /(^|[^a-z])tim([^a-z]|$)/.test(t) ? "TIM" : "";
-    var f = /vlan/.test(t) ? "vlan" : /gateway|(^|[^a-z])gw([^a-z]|$)|next ?hop|proximo salto/.test(t) ? "gw" :
-      /mascara|(^|[^a-z])mask|netmask|prefixo/.test(t) ? "mask" : /s1 ?\/? ?-?x2|loopback|sinalizacao/.test(t) ? "s1x2" :
-      /(^|[^a-z])oam([^a-z]|$)|omch|gerencia/.test(t) ? "oam" : /infra|ip (do )?site|interface|servico|ip lte|ip eth/.test(t) ? "infra" : "";
+    var all = (t + " " + c).trim();
+    var op = /vivo/.test(t) ? "VIVO" : /(^|[^a-z])tim([^a-z]|$)/.test(t) ? "TIM" : /vivo/.test(c) ? "VIVO" : /(^|[^a-z])tim([^a-z]|$)/.test(c) ? "TIM" : "";
+    if (/^infra (tim|vivo)$/.test(t)) return { f: "vlan", op: op };                 // "Infra Tim"/"Infra Vivo" = VLAN (PROJETO LÓGICO AUTOMÁTICO)
+    if (/(^|[^a-z])(rede|network)([^a-z]|$)/.test(t) && !/mascara|mask/.test(t)) return null;   // endereço de rede: não serve
+    function cls(x) {
+      return /vlan/.test(x) ? "vlan" : /gateway|(^|[^a-z])d?gw([^a-z]|$)|(^|[^a-z])gat\.?([^a-z]|$)|next ?hop|proximo salto/.test(x) ? "gw" :
+        /mascara|(^|[^a-z])mask|netmask|prefixo/.test(x) ? "mask" : /s1 ?[\/&-]? ?x2|loopback|sinalizacao/.test(x) ? "s1x2" :
+        /(^|[^a-z])oam([^a-z]|$)|omch|gerencia/.test(x) ? "oam" : /infra|ip (do )?site|interface|servico|ip lte|ip eth/.test(x) ? "infra" : "";
+    }
+    var f = cls(t);
+    if (!f || (f === "infra" && /servi/.test(t) && /s1|x2/.test(c))) f = cls(all) || f;
+    if (f === "mask" && /s1|x2|servi/.test(all) && !/infra/.test(t)) f = "smask";      // máscara do serviço (loopback é /32)
     return f ? { f: f, op: op } : null;
   }
-  function engVal(f, raw) {
+  // IP que o Excel salvou sem pontos (ex.: 10109160198 → 10.109.160.198)
+  function dotless(s) {
+    var out = [];
+    for (var a = 1; a <= 3; a++) for (var b = 1; b <= 3; b++) for (var c = 1; c <= 3; c++) {
+      var d = s.length - a - b - c; if (d < 1 || d > 3) continue;
+      var p = [s.slice(0, a), s.slice(a, a + b), s.slice(a + b, a + b + c), s.slice(a + b + c)];
+      if (p.every(function (x) { return +x <= 255 && !(x.length > 1 && x[0] === "0"); })) out.push(p.join("."));
+    }
+    return out;
+  }
+  function engVal(f, raw, hint) {
     var s = t0(raw).replace(/\s+/g, ""), m;
     if (f === "vlan") { m = /^(\d{1,4})(\.0+)?$/.exec(s); return m && +m[1] >= 1 && +m[1] <= 4094 ? { v: m[1] } : null; }
-    if (f === "mask") { if (ipOk(s) && maskBits(s) >= 8) return { v: s }; m = /^\/?(\d{1,2})$/.exec(s); return m && +m[1] >= 8 && +m[1] <= 32 ? { v: bits2mask(+m[1]) } : null; }
+    if (f === "mask" || f === "smask") { if (ipOk(s) && maskBits(s) >= 8) return { v: s }; m = /^\/?(\d{1,2})$/.exec(s); return m && +m[1] >= 8 && +m[1] <= 32 ? { v: bits2mask(+m[1]) } : null; }
     m = /^(\d{1,3}(?:\.\d{1,3}){3})(?:\/(\d{1,2}))?$/.exec(s);
-    return m && ipOk(m[1]) ? { v: m[1], mb: m[2] ? +m[2] : null } : null;
+    if (m && ipOk(m[1])) return { v: m[1], mb: m[2] ? +m[2] : null };
+    if (/^\d{7,12}$/.test(s)) {
+      var c = dotless(s); if (!c.length) return null;
+      var best = c.map(function (ip) { var q = ip.split("."), sc = 0; (hint || []).forEach(function (h) { var r = h.split("."); if (r[0] === q[0]) sc += 2; if (r[0] === q[0] && r[1] === q[1]) sc += 3; }); if (/^(10|172|192|100)\./.test(ip)) sc += 1; return { ip: ip, sc: sc }; })
+        .sort(function (x, y) { return y.sc - x.sc; });
+      if (best.length > 1 && best[0].sc === best[1].sc) return { v: best[0].ip, fix: s, amb: best.map(function (x) { return x.ip; }) };
+      return { v: best[0].ip, fix: s };
+    }
+    return null;
   }
+  function ffRow(row) { var o = [], last = ""; (row || []).forEach(function (v, i) { if (t0(v)) last = t0(v); o[i] = last; }); return o; }
   function engCands(sheets, site) {
     var out = [], notes = [], seen = {}, key = core(site), siteSeen = false;
-    function push(f, op, raw, sh, r, c, lab) {
-      var x = engVal(f, raw); if (!x) return false;
-      var k = f + "|" + x.v + "|" + op; if (seen[k]) return true; seen[k] = 1;
-      out.push({ f: f, op: op, v: x.v, where: sh + "!" + colL(c) + (r + 1), rk: sh + "#" + r, lab: t0(lab) });
-      if (x.mb && f !== "mask") push("mask", op, "/" + x.mb, sh, r, c, lab + " (/" + x.mb + ")");
+    function push(f, op, raw, sh, r, c, lab, hint) {
+      var x = engVal(f, raw, hint); if (!x) return false;
+      var k = f + "|" + x.v + "|" + op + "|" + sh; if (seen[k]) return true; seen[k] = 1;
+      out.push({ f: f, op: op, v: x.v, where: sh + "!" + colL(c) + (r + 1), rk: sh + "#" + r, lab: t0(lab).replace(/\s+/g, " "), fix: x.fix || "", amb: x.amb || null });
+      if (x.mb && f !== "mask") push(f === "s1x2" ? "smask" : "mask", op, "/" + x.mb, sh, r, c, lab + " (/" + x.mb + ")");
       return true;
     }
     (sheets || []).forEach(function (sh) {
       var rows = sh.rows || [], hr = -1, best = 0, i;
       for (i = 0; i < rows.length; i++) (rows[i] || []).forEach(function (c) { if (key && core(t0(c)) === key) siteSeen = true; });
-      for (i = 0; i < Math.min(rows.length, 40); i++) { var n = (rows[i] || []).filter(fieldOf).length; if (n >= 3 && n > best) { best = n; hr = i; } }
+      for (i = 0; i < Math.min(rows.length, 40); i++) { var n = (rows[i] || []).filter(function (c) { return fieldOf(c, ""); }).length; if (n >= 3 && n > best) { best = n; hr = i; } }
       if (hr >= 0) {                                            // layout em tabela (uma linha por site / operadora)
-        var H = rows[hr], siteC = -1, opC = -1;
-        H.forEach(function (h, c) { var t = nk(h); if (siteC < 0 && /^(siteid|site|elementoid|elemento|enodebname|nename|ne|sigla|estacao|sitea|siteaid)$/.test(t)) siteC = c; if (opC < 0 && /^operador/.test(t)) opC = c; });
+        var H = rows[hr], up1 = ffRow(rows[hr - 1]), up2 = ffRow(rows[hr - 2]), siteC = -1, opC = -1;
+        var ctx = function (c) { return [up2[c], up1[c]].filter(Boolean).join(" "); };
+        var W = Math.max(H.length, (rows[hr - 1] || []).length);
+        for (var cc = 0; cc < W; cc++) [H[cc], (rows[hr - 1] || [])[cc], (rows[hr - 2] || [])[cc]].forEach(function (h) {
+          var t = nk(h); if (siteC < 0 && /^(siteid|site|elementoid|elemento|enodebname|nename|ne|sigla|estacao|sitea|siteaid)$/.test(t)) siteC = cc; if (opC < 0 && /^operador/.test(t)) opC = cc;
+        });
         var data = [];
         for (var r = hr + 1; r < rows.length; r++) if ((rows[r] || []).some(function (x) { return t0(x); })) data.push(r);
         var sel = data;
-        if (siteC >= 0) { var mm = data.filter(function (r) { return key && core(t0(rows[r][siteC])) === key; }); sel = mm; if (!mm.length && data.length) notes.push(sh.name + ": " + site + " não aparece na coluna “" + t0(H[siteC]) + "”."); }
+        if (siteC >= 0) { var mm = data.filter(function (r) { return key && core(t0(rows[r][siteC])) === key; }); sel = mm; if (!mm.length && data.length) notes.push(sh.name + ": " + site + " não aparece na coluna de site."); }
         else if (data.length > 6) { sel = []; notes.push(sh.name + ": tabela com " + data.length + " linhas e sem coluna de site — ignorada."); }
         sel.forEach(function (r) {
           var row = rows[r] || [], rop = opC >= 0 ? (/vivo/i.test(row[opC]) ? "VIVO" : /tim/i.test(row[opC]) ? "TIM" : "") : "";
-          H.forEach(function (h, c) { var fo = fieldOf(h); if (fo) push(fo.f, fo.op || rop, row[c], sh.name, r, c, h); });
+          var hint = row.map(t0).filter(ipOk);
+          for (var c = 0; c < W; c++) { var fo = fieldOf(H[c], ctx(c)); if (fo) push(fo.f, fo.op || rop, row[c], sh.name, r, c, (ctx(c) ? ctx(c) + " › " : "") + t0(H[c]), hint); }
         });
       }
       for (i = 0; i < Math.min(rows.length, 400); i++) {         // layout rótulo → valor (ao lado ou abaixo)
-        if (i === hr) continue;
+        if (hr >= 0 && i >= hr - 2) continue;                    // abaixo do cabeçalho da tabela são valores, não rótulos
         var row2 = rows[i] || [];
         for (var c = 0; c < row2.length; c++) {
           if (typeof row2[c] !== "string") continue;
-          var fo = fieldOf(row2[c]); if (!fo) continue;
+          var fo = fieldOf(row2[c], ""); if (!fo) continue;
           var done = false;
           for (var k2 = c + 1; k2 <= c + 3 && k2 < row2.length; k2++) if (t0(row2[k2])) { done = push(fo.f, fo.op, row2[k2], sh.name, i, k2, row2[c]); break; }
           if (!done && hr < 0 && rows[i + 1]) push(fo.f, fo.op, rows[i + 1][c], sh.name, i + 1, c, row2[c]);
@@ -376,10 +412,17 @@
       return /\t/.test(l) ? l.split("\t") : l.split(/\s{2,}|\s*[:=]\s+|\s*;\s*/);
     });
   }
+  // linhas a partir de A1 (para o endereço bater com o Excel) e valor cru (IP salvo como número não vira 1,01E+10)
+  function engRows(ws) {
+    if (!ws || !ws["!ref"]) return [];
+    var rg = XLSX.utils.decode_range(ws["!ref"]); rg.s = { r: 0, c: 0 };
+    return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true, range: rg }).slice(0, 6000)
+      .map(function (r) { return (r || []).map(function (v) { return typeof v === "number" ? (Number.isInteger(v) ? String(v) : String(v)) : v; }); });
+  }
   function parseEngBook(ab, fname) {
     if (!window.XLSX) throw new Error("A biblioteca de planilhas (XLSX) não carregou.");
     var wb = XLSX.read(new Uint8Array(ab), { type: "array" });
-    return { file: fname, at: Date.now(), sheets: wb.SheetNames.map(function (n) { return { name: n, rows: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: false, defval: null, blankrows: true }).slice(0, 6000) }; }) };
+    return { file: fname, at: Date.now(), sheets: wb.SheetNames.map(function (n) { return { name: n, rows: engRows(wb.Sheets[n]) }; }) };
   }
 
   // ---------- parâmetros por site (salvos no navegador) ----------
@@ -448,13 +491,20 @@
     ["vlan", "infra", "mask", "gw", "s1x2"].forEach(function (f) {
       var u = p[f] != null ? String(p[f]).trim() : "";
       if (u) { T.v[f] = u; T.src[f] = "editado"; }
-      else if (pk[f]) { T.v[f] = pk[f].v; T.src[f] = "ENG-SI " + pk[f].where + (pk[f].op ? " · " + pk[f].op : "") + (pk[f].lab ? " · “" + pk[f].lab + "”" : ""); }
+      else if (pk[f]) {
+        T.v[f] = pk[f].v; T.src[f] = "ENG-SI " + pk[f].where + (pk[f].op ? " · " + pk[f].op : "") + (pk[f].lab ? " · “" + pk[f].lab + "”" : "") + (pk[f].fix ? " · estava sem pontos (" + pk[f].fix + ")" : "");
+        if (pk[f].amb) T.warn.push("Na ENG-SI o " + f + " veio sem pontos (" + pk[f].fix + ") e dá para ler de mais de um jeito: " + pk[f].amb.join(" / ") + " — usei " + pk[f].v + ", confira.");
+      }
       else T.v[f] = "";
     });
     if (!T.v.mask) { T.v.mask = "255.255.255.248"; T.src.mask = "padrão do roteiro (/29)"; }
+    if (T.src.vlan !== "editado" && T.v.vlan) {
+      var vt = E.c.filter(function (x) { return x.f === "vlan" && x.op === "TIM" && x.v === T.v.vlan; })[0];
+      if (vt && !E.c.some(function (x) { return x.f === "vlan" && x.op === "VIVO"; })) T.warn.push("A VLAN " + T.v.vlan + " também aparece como “" + vt.lab + "” (" + vt.where + ") e a ENG-SI não tem VLAN VIVO preenchida — confira se é a VLAN a usar para a VIVO.");
+    }
     var mb = maskBits(T.v.mask);
     if (!T.v.gw && ipOk(T.v.infra) && mb > 0 && mb < 31) { T.v.gw = n2ip(netOf(T.v.infra, mb) + 1); T.src.gw = "calculado: 1º IP da sub-rede — CONFIRME"; T.gwCalc = true; if (T.v.gw === T.v.infra) T.v.gw = ""; }
-    E.c.filter(function (x) { return x.op === "TIM"; }).forEach(function (x) { if (!devBy[x.v] && x.f !== "vlan" && x.f !== "mask" && x.f !== "gw") T.warn.push("A ENG-SI traz " + x.lab + " = " + x.v + " (TIM) que não está no LST DEVIP — confira se a TIM já está configurada."); });
+    E.c.filter(function (x) { return x.op === "TIM"; }).forEach(function (x) { if (!devBy[x.v] && (x.f === "infra" || x.f === "s1x2")) T.warn.push("A ENG-SI traz " + x.lab + " = " + x.v + " (TIM) que não está no LST DEVIP — confira se a TIM já está configurada."); });
 
     // parâmetros (calculados × editados)
     var hU = {}; T.hosts.forEach(function (h) { hU[h.id] = h; });
@@ -1520,7 +1570,7 @@
     },
     pingParse: pingParse,
     _t: { parseMou: parseMou, readAll: readAll, model: function () { return model(); }, script: function () { return script(model()); }, state: S,
-      tx: function () { return model().tx; }, txScript: function () { return txScript(model().tx); }, engCands: engCands, textRows: textRows, gwFind: gwFind, parseGwBook: parseGwBook,
+      tx: function () { return model().tx; }, txScript: function () { return txScript(model().tx); }, engCands: engCands, textRows: textRows, parseEngBook: parseEngBook, gwFind: gwFind, parseGwBook: parseGwBook,
       setEng: function (e) { ENG = e; render(); } }
   };
 

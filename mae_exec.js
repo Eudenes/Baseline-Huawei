@@ -178,8 +178,8 @@
     var dst = (/DSTIP\s*=\s*"?([\d.]+)/i.exec(it.cmd) || [])[1] || "";
     var x = await runOne(it.cmd), resp = x.resp || "", r = pingParse(resp);
     // se o resultado chegou depois do RETCODE, o helper entrega a sobra junto com a próxima resposta
-    for (var n = 1; !r.known && /RETCODE\s*=\s*0\b/.test(resp) && n <= 3 && !abort; n++) {
-      it.msg = "aguardando o resultado do PING (" + n + "/3)…"; setRow(it);
+    for (var n = 1; !r.known && !/RETCODE\s*=\s*[1-9]/.test(resp) && n <= 4 && !abort; n++) {
+      it.msg = "aguardando o fim do PING (" + n + "/4)…"; setRow(it);
       if (!(await sleep(5000))) break;
       var y = await runOne("LST ENODEBFUNCTION:;");
       var extra = String(y.resp || ""), cut = extra.search(/%%(?:\/\*\d+\*\/)?\s*LST\s+ENODEBFUNCTION/i);
