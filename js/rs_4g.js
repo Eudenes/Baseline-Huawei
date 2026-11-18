@@ -195,7 +195,7 @@
 
   // ---------------------------------------------------------------- estado
   var S = { site: "", plan: [], readText: "", readAt: "", U: {}, dirty: false, auto: "" };
-  function U() { var k = core(S.site) || "_"; return S.U[k] || (S.U[k] = { p: {}, nc: {}, skip: {}, blk: { cfm: true, rs: null, freq: true, name: true, newc: true } }); }
+  function U() { var k = core(S.site) || "_"; return S.U[k] || (S.U[k] = { p: {}, nc: {}, skip: {}, off: {}, blk: { cfm: true, rs: null, freq: true, name: true, newc: true } }); }
   function mmeStore() { return lsGet(LS_MME, {}); }
 
   // ================================================================ ETAPA 0 — TX VIVO (configuração e teste de transmissão)
@@ -774,6 +774,12 @@
         a.ord = ordOf(pr.setor, pr.cell);
       } else a.ord = ordOf("", c.name);
       a.skip = !!u.skip[c.id];
+      // ações desmarcadas uma a uma na tabela (freq / banda / nome): ficam visíveis mas saem do script
+      var off = u.off || (u.off = {});
+      a.plan = { freq: a.newDl, bw: a.newBw, name: a.newName }; a.off = {};
+      if (a.newDl && off[c.id + "|freq"]) { a.off.freq = true; a.newDl = undefined; a.rmvInf = []; }
+      if (a.newBw && off[c.id + "|bw"]) { a.off.bw = true; a.newBw = undefined; }
+      if (a.newName && off[c.id + "|name"]) { a.off.name = true; a.newName = undefined; }
       a.ops = cellop[c.id] || {};
       return a;
     });
@@ -1022,6 +1028,9 @@
     "#pane-rs4g .r4-chips{display:flex;gap:6px;flex-wrap:wrap}",
     "#pane-rs4g .chip{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;background:#eef0f4;color:#475467;white-space:nowrap}",
     "#pane-rs4g .chip.ok{background:var(--c-okbg,#e3f6ea);color:var(--c-ok,#16613a)}#pane-rs4g .chip.wa{background:var(--c-warnbg,#fff3dc);color:var(--c-warn,#8a5a00)}",
+    "#pane-rs4g .r4-act{border:1px solid #b8c2f5;background:#e8ecff;color:#4f63d8;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;cursor:pointer;margin:1px 2px}",
+    "#pane-rs4g .r4-act.off{background:#f2f4f7;color:#98a2b3;border-color:#d0d5dd;text-decoration:line-through}",
+    "#pane-rs4g .r4-offv{color:#98a2b3}",
     "#pane-rs4g .chip.er{background:#fdecec;color:#c7000b}#pane-rs4g .chip.in{background:#e8ecff;color:#4f63d8}",
     "#pane-rs4g .r4-grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,2fr);gap:12px}",
     "#pane-rs4g .r4-two{display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,2fr);gap:12px}",
@@ -1144,6 +1153,7 @@
 
   var M = null;
   function chip(c, t) { return '<span class="chip ' + c + '">' + esc(t) + "</span>"; }
+  function arrowOff(a, b, plan, off) { return off ? '<span class="r4-offv">' + esc(a || "—") + ' <s>→ ' + esc(plan) + "</s></span>" : arrow(a, b); }
   function arrow(a, b) { return a === b || !b ? '<span class="same">' + esc(a || "—") + "</span>" : esc(a || "—") + ' <span class="arrow">→ ' + esc(b) + "</span>"; }
 
   // ---------------------------------------------------------------- lista de sites da planilha MOU
@@ -1246,9 +1256,11 @@
     var h = '<div class="tw"><table class="r4t"><thead><tr><th></th><th>LCID</th><th>Célula no site</th><th>Nome na planilha</th><th>Banda</th><th>DL EARFCN</th><th>BW (MHz)</th><th>PCI</th><th>RS (CELLOP)</th><th>Ações</th></tr></thead><tbody>';
     M.cells.forEach(function (a) {
       var c = a.c, acts = [];
-      if (a.act.indexOf("freq") >= 0) acts.push(chip("in", "freq"));
-      if (a.act.indexOf("bw") >= 0) acts.push(chip("in", "banda"));
-      if (a.act.indexOf("name") >= 0) acts.push(chip("in", "nome"));
+      [["freq", "freq"], ["bw", "banda"], ["name", "nome"]].forEach(function (x) {
+        if (a.act.indexOf(x[0]) < 0) return;
+        var of = !!a.off[x[0]];
+        acts.push('<button type="button" class="r4-act' + (of ? " off" : "") + '" data-act="' + esc(c.id + "|" + x[0]) + '" title="' + (of ? "fora do script — clique para incluir" : "no script — clique para tirar") + '">' + (of ? "☐ " : "☑ ") + x[1] + "</button>");
+      });
       if (a.pciDiff) acts.push(chip("wa", "PCI planilha " + a.pciDiff));
       if ((a.rmvInf || []).length) acts.push(chip("wa", "RMV INTERNFREQ " + a.rmvInf.join(",")));
       if (!a.pr) acts.push(chip("wa", "fora da planilha"));
@@ -1256,12 +1268,13 @@
       var opTxt = ta.length ? ta.map(function (t) { return t + (a.ops[t] ? "✓" : ""); }).join(" / ") : "—";
       var has = a.act.length > 0;
       h += "<tr" + (a.skip ? ' class="off"' : "") + "><td>" + (has ? '<input type="checkbox" data-skip="' + esc(c.id) + '"' + (a.skip ? "" : " checked") + ' title="incluir as ações desta célula">' : "") + "</td>" +
-        '<td class="mono">' + esc(c.id) + "</td><td>" + esc(c.name) + (c.nb ? " " + chip("", "NB-IoT") : "") + "</td><td>" + (a.pr ? arrow(c.name, a.newName) : '<span class="same">—</span>') + "</td>" +
-        '<td class="mono">' + esc(c.band || "—") + '</td><td class="mono">' + (c.nb ? "—" : arrow(c.dl, a.newDl)) + '</td><td class="mono">' + (c.nb ? "—" : arrow(bwMhz(c.dlbw) || c.dlbw, a.newBw)) + "</td>" +
+        '<td class="mono">' + esc(c.id) + "</td><td>" + esc(c.name) + (c.nb ? " " + chip("", "NB-IoT") : "") + "</td><td>" + (a.pr ? arrowOff(c.name, a.newName, a.plan.name, a.off.name) : '<span class="same">—</span>') + "</td>" +
+        '<td class="mono">' + esc(c.band || "—") + '</td><td class="mono">' + (c.nb ? "—" : arrowOff(c.dl, a.newDl, a.plan.freq, a.off.freq)) + '</td><td class="mono">' + (c.nb ? "—" : arrowOff(bwMhz(c.dlbw) || c.dlbw, a.newBw, a.plan.bw, a.off.bw)) + "</td>" +
         '<td class="mono">' + esc(c.pci || "—") + '</td><td class="mono">' + esc(opTxt) + "</td><td>" + (acts.join(" ") || '<span class="same">ok</span>') + "</td></tr>";
     });
     h += "</tbody></table></div>";
     $("r4Cells").innerHTML = h;
+    $("r4Cells").querySelectorAll("[data-act]").forEach(function (el) { el.addEventListener("click", function () { var u = U(), k = this.getAttribute("data-act"); u.off = u.off || {}; if (u.off[k]) delete u.off[k]; else u.off[k] = true; render(); }); });
     $("r4Cells").querySelectorAll("[data-skip]").forEach(function (el) { el.addEventListener("change", function () { U().skip[this.getAttribute("data-skip")] = !this.checked; render(); }); });
     renderNew();
   }
