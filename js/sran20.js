@@ -1,4 +1,4 @@
-/* sran20.js — aba "Planilha SRAN20" do Baseline Huawei.
+/* sran20.js — aba 11 "New Site" (antes "Planilha SRAN20") do Baseline Huawei.
    Preenche o template SRAN20 (importação Huawei) a partir do eRPD TSL (RF) e da ENG-SI (IPs).
    · Para cada site informado, clona as linhas do site modelo do template compatível (2 ou 3 setores
      embutidos, ou templates carregados na tela) e troca os campos de RF e de IP.

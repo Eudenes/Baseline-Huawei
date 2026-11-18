@@ -435,7 +435,10 @@ var SRANCONV = (function () {
     "#pane-s4g .s4-msg{border-radius:8px;padding:8px 12px;margin:6px 0;font-size:13px}",
     "#pane-s4g .s4-msg.wa{background:var(--c-warnbg,#fff3dc);color:var(--c-warn,#8a5a00)}#pane-s4g .s4-msg.er{background:#fdecec;color:#9d0009}#pane-s4g .s4-msg.ok{background:var(--c-okbg,#e3f6ea);color:var(--c-ok,#16613a)}",
     "#pane-s4g .rules{font-size:13px;line-height:1.5}#pane-s4g .rules li{margin:2px 0}#pane-s4g .rules code{font-size:12px;background:#f2f4f7;padding:0 4px;border-radius:4px}",
-    "#pane-s4g .empty{color:#98a2b3;font-size:13px;padding:14px 4px}"
+    "#pane-s4g .empty{color:#98a2b3;font-size:13px;padding:14px 4px}",
+    "#s4Mode4g .fld{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--text-muted,#667085)}#s4Mode4g .fld input{font:inherit;font-size:13.5px;color:var(--text,#1d2939);padding:7px 9px;border:1px solid var(--border,#dfe3eb);border-radius:8px;min-width:260px;background:#fff}",
+    "#s4Mode4g .or{color:#98a2b3;font-size:12px;margin:10px 0 6px;text-align:center}",
+    "#s4Mode4g .prog{font-size:12.5px;color:var(--text-muted,#667085);margin-top:6px;min-height:18px}#s4Mode4g .prog .ok{color:var(--c-ok,#16613a)}#s4Mode4g .prog .er{color:#c7000b}"
   ].join("\n");
   document.head.appendChild(css);
 
@@ -451,6 +454,10 @@ var SRANCONV = (function () {
     '<div class="chips" id="s4Chips"></div></section>' +
 
     '<section class="card"><h2><span class="n">1</span>Backups da BBU</h2>' +
+    '<div class="row"><label class="fld">NE do eNodeB no MAE (vários: separe por vírgula)<input id="s4Ne" list="s4NeList" placeholder="ex.: NLBNPH01, 18NLQITO01" spellcheck="false" autocomplete="off"><datalist id="s4NeList"></datalist></label>' +
+    '<button class="primary" type="button" id="s4Bkp" style="align-self:flex-end">Fazer backup pelo MAE</button></div>' +
+    '<div class="prog" id="s4BkpSt"></div>' +
+    '<div class="or">ou solte os backups que você já tem</div>' +
     '<div class="s4-drop" id="s4Drop" tabindex="0" role="button" aria-label="Escolher ou arrastar os backups">' +
       '<div class="ic">🗜️</div><b>Arraste aqui os backups (vários de uma vez)</b>' +
       '<span>Aceita o pacote do backup <code>…BKPFileOf_swmengine…tar.gz</code>, o <code>ENBCFG.XML.gz</code>, o <code>ENBCFG.XML</code> ou um <code>.zip</code> com eles. ' +
@@ -695,6 +702,35 @@ var SRANCONV = (function () {
   // ---------------------------------------------------------------- arrastar / escolher
   var drop = $("s4Drop");
   $("s4File").addEventListener("change", function () { handleFiles(this.files); this.value = ""; });
+
+  // backup pela rede: BKP CFGFILE + ULD CFGFILE pela sub-aba BKP da aba 2 (mesmo servidor/senha); o XML entra na lista acima
+  $("s4Ne").addEventListener("focus", function () {
+    var l = (window.MAE && window.MAE.neList && window.MAE.neList()) || [];
+    $("s4NeList").innerHTML = l.map(function (n) { return '<option value="' + esc(n.name) + '">' + esc(n.type + " · " + n.ip) + "</option>"; }).join("");
+  });
+  $("s4Bkp").addEventListener("click", async function () {
+    var b = this, nes = $("s4Ne").value.split(/[,;\s]+/).map(function (x) { return x.trim(); }).filter(Boolean), ok = [], bad = [];
+    nes = nes.filter(function (x, i) { return nes.indexOf(x) === i; });
+    if (!nes.length) { $("s4BkpSt").innerHTML = '<span class="er">Digite ou escolha o NE do eNodeB.</span>'; return; }
+    if (!window.SW_TAB || !window.SW_TAB.backupXml) { $("s4BkpSt").innerHTML = '<span class="er">A aba 2 (BKP, CFGFILE e SW) não está carregada nesta página.</span>'; return; }
+    b.disabled = true;
+    for (var i = 0; i < nes.length; i++) {
+      var ne = nes[i], pre = (nes.length > 1 ? "(" + (i + 1) + "/" + nes.length + ") " : "");
+      $("s4BkpSt").textContent = pre + "Iniciando o backup de " + ne + "…";
+      try {
+        var r = await window.SW_TAB.backupXml(ne, function (v) {
+          var cur = v.steps[Math.max(0, v.cur)] || {};
+          $("s4BkpSt").textContent = pre + ne + " · " + (cur.label || cur.cmd || "") + (cur.pct != null ? " " + cur.pct + "%" : "") + (cur.msg ? " · " + cur.msg : "");
+        }, { title: "Backup XML (4G → SRAN)", check: function (K) { return K.kind === "WCDMA" ? ne + " é 3G puro (" + (K.pt || "WCDMA") + "): use a opção “3G puro + LTE → SRAN”." : ""; } });
+        var u8 = r.bytes;
+        await handleFiles([{ name: "MAE · " + r.name, arrayBuffer: function () { return Promise.resolve(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength)); } }]);
+        ok.push(r.ne);
+      } catch (e) { bad.push(ne + ": " + (e.message || e)); }
+    }
+    $("s4BkpSt").innerHTML = (ok.length ? '<span class="ok">✓ Backup de ' + ok.map(esc).join(", ") + " convertido (veja o Resultado).</span>" : "") +
+      (bad.length ? (ok.length ? "<br>" : "") + bad.map(function (x) { return '<span class="er">✗ ' + esc(x) + "</span>"; }).join("<br>") : "");
+    b.disabled = false;
+  });
   drop.addEventListener("click", function () { $("s4File").click(); });
   drop.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("s4File").click(); } });
   ["dragenter", "dragover"].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; drop.classList.add("over"); }); });
