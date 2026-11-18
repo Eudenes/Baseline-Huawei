@@ -119,8 +119,13 @@
       };
       var s = sites.get(site);
       if (!s) { s = { site: site, enbName: '', enbId: null, cells: new Map(), dups: [] }; sites.set(site, s); }
-      s.enbName = norm(g(r, 'EnodeB Name')) || s.enbName;
-      s.enbId = toNum(g(r, 'eNodebID(DEC)')) != null ? toNum(g(r, 'eNodebID(DEC)')) : s.enbId;
+      var en = norm(g(r, 'EnodeB Name')), ei = toNum(g(r, 'eNodebID(DEC)'));
+      if (en && s.enbName && en !== s.enbName && s.dups.indexOf('eNodeB Name diferente entre linhas do eRPD: ' + s.enbName + ' × ' + en + ' (linha ' + (ri + 1) + ') — usado ' + en + '.') < 0)
+        s.dups.push('eNodeB Name diferente entre linhas do eRPD: ' + s.enbName + ' × ' + en + ' (linha ' + (ri + 1) + ') — usado ' + en + '.');
+      if (ei != null && s.enbId != null && ei !== s.enbId)
+        s.dups.push('eNodeB ID diferente entre linhas do eRPD: ' + s.enbId + ' × ' + ei + ' (linha ' + (ri + 1) + ') — usado ' + ei + '.');
+      s.enbName = en || s.enbName;
+      s.enbId = ei != null ? ei : s.enbId;
       if (cell.iot && cell.ulIot == null && cell.dl != null) { cell.ulIot = cell.dl + 18000; cell.ulDerived = true; }
       var old = s.cells.get(cellId);
       if (old && (old.pci !== cell.pci || old.rsi !== cell.rsi || old.tac !== cell.tac || old.dl !== cell.dl))
@@ -138,6 +143,8 @@
   }
 
   // ---------- ENG-SI (IPs) ----------
+  var ENGSI_FIELDS = [['infra', 'Infra Ip Site'], ['gw', 'Infra Gateway Site'], ['mask', 'Máscara Infra'], ['vlan', 'VLAN (Infra Tim)'],
+    ['s1', 'Ip Service S1X2 Tim'], ['oam', 'Ip OAM'], ['oc', 'Oc Netflow'], ['regional', 'Regional']];
   function parseENGSI(XLSX, wb) {
     var name = findSheet(wb, function (n) { return n.indexOf('LOGICO') >= 0 && n.indexOf('AUTOM') >= 0; });
     if (!name) throw new Error('Aba "PROJETO LÓGICO AUTOMÁTICO" não encontrada na ENG-SI.');
@@ -151,11 +158,20 @@
       var r = rows[ri]; if (!r) continue;
       var site = norm(g(r, 'Site Id')).toUpperCase();
       if (!site) continue;
-      sites.set(site, {
+      var nv = {
         site: site, row: ri + 1, oc: g(r, 'Oc Netflow'), regional: g(r, 'Regional'),
         infra: g(r, 'Infra Ip Site'), gw: g(r, 'Infra Gateway Site'), mask: cidrToMask(g(r, 'Máscara Infra')),
-        vlan: g(r, 'Infra Tim'), s1: g(r, 'Ip Service S1X2 Tim'), oam: g(r, 'Ip OAM')
-      });
+        vlan: g(r, 'Infra Tim'), s1: g(r, 'Ip Service S1X2 Tim'), oam: g(r, 'Ip OAM'), dups: []
+      };
+      var ov = sites.get(site);
+      if (ov) {
+        nv.dups = ov.dups.slice();
+        ENGSI_FIELDS.forEach(function (f) {
+          if (!isEmpty(ov[f[0]]) && !isEmpty(nv[f[0]]) && norm(ov[f[0]]) !== norm(nv[f[0]]))
+            nv.dups.push(f[1] + ' diferente entre linhas da ENG-SI: ' + ov[f[0]] + ' (linha ' + ov.row + ') × ' + nv[f[0]] + ' (linha ' + nv.row + ') — usado o da linha ' + nv.row + '.');
+        });
+      }
+      sites.set(site, nv);
     }
     return { sheet: name, sites: sites };
   }
@@ -455,7 +471,10 @@
       if (e.enbId == null) errs.push('eRPD sem "eNodebID(DEC)".');
       if (e.tacLte == null) warns.push('eRPD sem TAC das células LTE.');
       e.dups.forEach(function (d) { warns.push(d); });
+      var tacs = {}; e.cells.forEach(function (c) { if (!c.iot && c.tac != null) tacs[c.tac] = 1; });
+      if (Object.keys(tacs).length > 1) warns.push('TAC diferente entre as células LTE no eRPD (' + Object.keys(tacs).join(' × ') + ') — usado ' + e.tacLte + '.');
     }
+    if (i && i.dups) i.dups.forEach(function (d) { warns.push(d); });
     if (e) resolveNb({ cells: e.cells }, erpd.earfcn || earfcnMap(DEFAULT_EARFCN));
     return {
       name: name, enbName: e ? e.enbName : '', enbId: e ? e.enbId : null,
@@ -656,6 +675,7 @@
 
   var api = {
     parseERPD: parseERPD, parseENGSI: parseENGSI, loadTemplate: loadTemplate,
+    ENGSI_FIELDS: ENGSI_FIELDS, isEmpty: isEmpty,
     buildSite: buildSite, generate: generate, mergeOutputs: mergeOutputs, earfcnMap: earfcnMap, DEFAULT_EARFCN: DEFAULT_EARFCN, modelProfile: modelProfile, compat: compat, cellMap: cellMap, prbWarnings: prbWarnings, cidrToMask: cidrToMask, BW: BW
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -849,6 +869,9 @@
     "#pane-s20 .s20-x{position:absolute;top:6px;right:10px;color:var(--text-muted);font-size:13px;cursor:pointer;text-decoration:none;display:none}",
     "#pane-s20 .s20-drop.s20-done .s20-x{display:block}#pane-s20 .s20-x:hover{color:#c7000b}",
     "#pane-s20 textarea.s20-filter{min-height:118px}",
+    "#pane-s20 .s20-sum{margin-top:10px;font-size:13px}#pane-s20 .s20-sumrow{display:flex;flex-wrap:wrap;gap:6px}",
+    "#pane-s20 .s20-conf{margin-top:8px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;background:var(--surface)}",
+    "#pane-s20 .s20-conf summary{cursor:pointer;font-weight:600}#pane-s20 .s20-conf ul{margin:4px 0 4px 18px;padding:0}#pane-s20 .s20-conf p{margin:6px 0}",
     "#pane-s20 .steps-grid{grid-template-columns:minmax(0,2fr) minmax(320px,1fr)}",
     "@media (max-width:1100px){#pane-s20 .steps-grid{grid-template-columns:1fr}}",
     "#pane-s20 section.result{margin-top:0}",
@@ -893,6 +916,7 @@
   }
   var tick = function () { return new Promise(function (r) { setTimeout(r, 30); }); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var norm = function (s) { return String(s == null ? '' : s).replace(/\u00a0/g, ' ').trim(); };
   function download(bytes, name) {
     var blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
@@ -924,9 +948,10 @@
 '  </section>' +
 '  <section class="step">' +
 '    <div class="step-head"><span class="step-num">2</span><h2>Sites</h2></div>' +
-'    <p class="instr">Informe os Site IDs a gerar — separados por vírgula, espaço ou um por linha (ex.: <span class="mono">SR-SCS131, SR-JIMA01</span>). Cada site vai para o template compatível com as células dele no eRPD.</p>' +
+'    <p class="instr">Ao carregar o eRPD e a ENG-SI, a lista abaixo é preenchida com <b>todos os sites das planilhas</b>. Pode apagar os que não quer ou digitar outros (vírgula, espaço ou um por linha). Cada site vai para o template compatível com as células dele no eRPD.</p>' +
 '    <textarea class="s20-filter" spellcheck="false" placeholder="SR-SCS131&#10;SR-JIMA01"></textarea>' +
-'    <div class="row"><button type="button" class="ghost s20-all">Marcar todos válidos</button><button type="button" class="ghost s20-none">Desmarcar todos</button><button type="button" class="ghost s20-clear">Limpar sites</button></div>' +
+'    <div class="row"><button type="button" class="ghost s20-list">↺ Listar sites das planilhas</button><button type="button" class="ghost s20-all">Marcar todos válidos</button><button type="button" class="ghost s20-none">Desmarcar todos</button><button type="button" class="ghost s20-clear">Limpar sites</button></div>' +
+'    <div class="s20-sum"></div>' +
 '  </section>' +
 '</div>' +
 '<section class="result">' +
@@ -938,7 +963,8 @@
 '  <details><summary>O que é preenchido automaticamente</summary><div class="table-wrap s20-map"></div></details>' +
 '</section>';
     var $ = function (q) { return el.querySelector(q); };
-    var state = { erpd: null, engsi: null, erpdFiles: [], engsiFiles: [], templates: [], xmlModels: [], selected: new Set(), rows: [] };
+    var state = { erpd: null, engsi: null, erpdFiles: [], engsiFiles: [], templates: [], xmlModels: [], selected: new Set(), rows: [], conf: new Map(), autoList: null };
+    function addConf(site, msg) { var l = state.conf.get(site); if (!l) state.conf.set(site, l = []); if (l.indexOf(msg) < 0) l.push(msg); }
 
     $('.s20-map').innerHTML = '<table><tr><th>Aba SRAN20</th><th>Campo</th><th>Origem</th></tr>' + [
       ['Base Station Transport Data', 'Name / eNodeB Name / eNodeB ID', 'Site ID · eRPD EnodeB Name · eNodebID(DEC)'],
@@ -999,11 +1025,29 @@
     // junta vários arquivos: o arquivo carregado por último prevalece em caso de site repetido
     function mergeErpd() {
       if (!state.erpdFiles.length) { state.erpd = null; return; }
-      var sites = new Map();
+      var sites = new Map(), srcSite = new Map(), srcCell = new Map();
       state.erpdFiles.forEach(function (f) {
         f.data.sites.forEach(function (s, k) {
           var cur = sites.get(k);
-          if (!cur) { sites.set(k, s); return; }
+          s.cells.forEach(function (c, id) { if (!cur || !cur.cells.has(id)) srcCell.set(k + '|' + id, f.name); });
+          if (!cur) { sites.set(k, s); srcSite.set(k, f.name); return; }
+          // mesmo site em mais de um arquivo de RF: aponta valores diferentes (vale o último arquivo)
+          var pf = srcSite.get(k);
+          [['eNodeB Name', cur.enbName, s.enbName], ['eNodeB ID', cur.enbId, s.enbId]].forEach(function (x) {
+            if (!C.isEmpty(x[1]) && !C.isEmpty(x[2]) && String(x[1]) !== String(x[2]))
+              addConf(k, 'Conflito eRPD — ' + x[0] + ': ' + x[1] + ' (' + pf + ') × ' + x[2] + ' (' + f.name + ') → usado ' + x[2] + '.');
+          });
+          s.cells.forEach(function (c, id) {
+            var o = cur.cells.get(id); if (!o) return;
+            var of = srcCell.get(k + '|' + id) || pf;
+            [['nome', 'name'], ['PCI', 'pci'], ['RSI', 'rsi'], ['TAC', 'tac'], ['DL EARFCN', 'dl'], ['BW', 'bw'], ['banda', 'band'], ['setor', 'sector']].forEach(function (x) {
+              var a = o[x[1]], b = c[x[1]];
+              if (!C.isEmpty(a) && !C.isEmpty(b) && String(a) !== String(b))
+                addConf(k, 'Conflito eRPD — célula ' + id + ' ' + x[0] + ': ' + a + ' (' + of + ') × ' + b + ' (' + f.name + ') → usado ' + b + '.');
+            });
+            srcCell.set(k + '|' + id, f.name);
+          });
+          srcSite.set(k, f.name);
           var m = { site: k, enbName: s.enbName || cur.enbName, enbId: s.enbId != null ? s.enbId : cur.enbId, cells: new Map(cur.cells), dups: cur.dups.concat(s.dups) };
           s.cells.forEach(function (c, id) { m.cells.set(id, c); });
           var lte = [], iot = []; m.cells.forEach(function (c) { (c.iot ? iot : lte).push(c); });
@@ -1018,8 +1062,18 @@
     }
     function mergeEngsi() {
       if (!state.engsiFiles.length) { state.engsi = null; return; }
-      var sites = new Map();
-      state.engsiFiles.forEach(function (f) { f.data.sites.forEach(function (s, k) { sites.set(k, s); }); });
+      var sites = new Map(), src = new Map();
+      state.engsiFiles.forEach(function (f) {
+        f.data.sites.forEach(function (s, k) {
+          var cur = sites.get(k);
+          if (cur) C.ENGSI_FIELDS.forEach(function (x) {
+            var a = cur[x[0]], b = s[x[0]];
+            if (!C.isEmpty(a) && !C.isEmpty(b) && norm(a) !== norm(b))
+              addConf(k, 'Conflito ENG-SI — ' + x[1] + ': ' + a + ' (' + src.get(k) + ') × ' + b + ' (' + f.name + ') → usado ' + b + '.');
+          });
+          sites.set(k, s); src.set(k, f.name);
+        });
+      });
       state.engsi = { sites: sites };
     }
     function fileListHtml(list, unit) {
@@ -1071,7 +1125,7 @@
           state.templates.sort(function (a, b) { return (a.isDefault ? 1 : 0) - (b.isDefault ? 1 : 0); });
         });
       }).then(function () {
-        mergeErpd(); mergeEngsi(); drawStatus(); refresh();
+        state.conf = new Map(); mergeErpd(); mergeEngsi(); drawStatus(); autoList(false); refresh();
         if (problems.length) log('<span style="color:var(--s20-err)">' + problems.map(function (x) { return '✗ ' + esc(x); }).join('\n') + '</span>');
       });
     }
@@ -1083,12 +1137,63 @@
         e.preventDefault(); e.stopPropagation();
         if (k === 'erpd') state.erpdFiles = []; else if (k === 'engsi') state.engsiFiles = [];
         else { state.templates = state.templates.filter(function (t) { return t.isDefault; }); state.xmlModels = state.xmlModels.filter(function (m) { return m.isDefault; }); }
-        mergeErpd(); mergeEngsi(); drawStatus(); refresh();
+        state.conf = new Map(); mergeErpd(); mergeEngsi(); drawStatus(); autoList(false); refresh();
       });
       d.addEventListener('dragover', function (e) { e.preventDefault(); d.classList.add('s20-over'); });
       d.addEventListener('dragleave', function () { d.classList.remove('s20-over'); });
       d.addEventListener('drop', function (e) { e.preventDefault(); d.classList.remove('s20-over'); handleFiles(k, e.dataTransfer.files); });
     });
+
+    // todos os sites das planilhas (eRPD ∪ ENG-SI), sem repetir SR-XXX / XXX
+    var coreN = function (n) { return String(n).toUpperCase().replace(/^SR-/, ''); };
+    function sheetSites() {
+      var by = new Map();
+      var add = function (n, src) {
+        var k = coreN(n), e = by.get(k);
+        if (!e) by.set(k, e = { name: n, erpd: false, engsi: false });
+        if (src === 'erpd') e.name = n;            // nome do eRPD prevalece
+        e[src] = true;
+      };
+      if (state.erpd) state.erpd.sites.forEach(function (_, n) { add(n, 'erpd'); });
+      if (state.engsi) state.engsi.sites.forEach(function (_, n) { add(n, 'engsi'); });
+      return Array.from(by.values()).sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+    }
+    function autoList(force) {
+      var ta = $('.s20-filter'), cur = ta.value.trim();
+      if (!force && cur && cur !== state.autoList) return;          // lista digitada pelo usuário: não mexe
+      var l = sheetSites().map(function (e) { return e.name; }).join('\n');
+      ta.value = l; state.autoList = l; state.touched = false;
+    }
+    function drawSum() {
+      var box = $('.s20-sum'), l = sheetSites();
+      if (!l.length) { box.innerHTML = ''; return; }
+      var onlyE = l.filter(function (e) { return e.erpd && !e.engsi; }), onlyI = l.filter(function (e) { return e.engsi && !e.erpd; });
+      // conflitos entre arquivos + linhas repetidas com valores diferentes dentro do mesmo arquivo
+      var all = new Map();
+      var put = function (k, m) { var x = all.get(k); if (!x) all.set(k, x = []); if (x.indexOf(m) < 0) x.push(m); };
+      state.conf.forEach(function (v, k) { v.forEach(function (m) { put(k, m); }); });
+      if (state.erpd) state.erpd.sites.forEach(function (x, k) { (x.dups || []).forEach(function (m) { put(k, m); }); });
+      if (state.engsi) state.engsi.sites.forEach(function (x, k) { (x.dups || []).forEach(function (m) { put(k, m); }); });
+      var nConf = 0; all.forEach(function (v) { nConf += v.length; });
+      var both = l.length - onlyE.length - onlyI.length;
+      var h = '<div class="s20-sumrow"><span class="s20-pill ok">' + l.length + ' sites nas planilhas</span> <span class="s20-pill ok">' + both + ' no eRPD e na ENG-SI</span>' +
+        (onlyE.length ? ' <span class="s20-pill warn">' + onlyE.length + ' só no eRPD</span>' : '') +
+        (onlyI.length ? ' <span class="s20-pill warn">' + onlyI.length + ' só na ENG-SI</span>' : '') +
+        (nConf ? ' <span class="s20-pill err">⚠ ' + nConf + ' valor(es) conflitante(s) em ' + all.size + ' site(s)</span>' : ' <span class="s20-pill ok">sem valores conflitantes</span>') + '</div>';
+      if (nConf) {
+        h += '<details class="s20-conf" open><summary>Valores diferentes para o mesmo site (entre arquivos ou entre linhas repetidas)</summary><ul>';
+        Array.from(all.keys()).sort().forEach(function (k) {
+          h += '<li><b>' + esc(k) + '</b><ul>' + all.get(k).map(function (m) { return '<li>' + esc(m) + '</li>'; }).join('') + '</ul></li>';
+        });
+        h += '</ul></details>';
+      }
+      if (onlyE.length || onlyI.length) {
+        h += '<details class="s20-conf"><summary>Sites que estão em só uma das planilhas</summary>' +
+          (onlyE.length ? '<p><b>Só no eRPD (sem IPs):</b> ' + onlyE.map(function (e) { return esc(e.name); }).join(', ') + '</p>' : '') +
+          (onlyI.length ? '<p><b>Só na ENG-SI (sem RF):</b> ' + onlyI.map(function (e) { return esc(e.name); }).join(', ') + '</p>' : '') + '</details>';
+      }
+      box.innerHTML = h;
+    }
 
     function wantedSites() {
       var txt = $('.s20-filter').value.toUpperCase().match(/[A-Z0-9][A-Z0-9_-]{3,}/g);
@@ -1097,6 +1202,7 @@
     }
 
     function refresh() {
+      drawSum();
       var wrap = $('.s20-tablewrap');
       if (!state.erpd || !state.engsi) {
         $('.s20-go').disabled = true; $('.s20-gox').disabled = true; state.rows = []; updateCount();
@@ -1107,6 +1213,8 @@
       var names = wantedSites();
       state.rows = names.map(function (n) {
         var S = C.buildSite(n, state.erpd, state.engsi), tpl = null, cmNotes = null;
+        var cf = (state.conf.get(n) || []).concat(n !== 'SR-' + coreN(n) ? [] : (state.conf.get(coreN(n)) || []));
+        if (cf.length) S.warns = cf.concat(S.warns);
         if (!S.errors.length) {
           // 1º template idêntico ao site; senão o 1º que serve ligando as células por setor (frequência diferente)
           var maps = state.templates.map(function (t) { return C.cellMap(S, t.profile); });
@@ -1126,7 +1234,7 @@
       state.rows.forEach(function (r) {
         var S = r.S, ok = !S.errors.length, ip = S.ip || {}, wl = S.warns.concat(r.pw || []);
         var cells = Array.from(S.cells.values()).map(function (c) { return c.cellId + '·' + (c.pci == null ? '-' : c.pci) + (c.iot ? '' : '·' + (c.rsi == null ? '-' : c.rsi)); }).join('  ');
-        var status = !ok ? '<span class="s20-pill err">Erro</span><div class="s20-msg err">' + S.errors.map(esc).join('<br>') + '</div>'
+        var status = !ok ? '<span class="s20-pill err">Erro</span><div class="s20-msg err">' + S.errors.map(esc).join('<br>') + '</div>' + (wl.length ? '<div class="s20-msg warn">' + wl.map(esc).join('<br>') + '</div>' : '')
           : (wl.length ? '<span class="s20-pill warn">Atenção</span><div class="s20-msg warn">' + wl.map(esc).join('<br>') + '</div>' : '<span class="s20-pill ok">OK</span>');
         h += '<tr class="' + (ok ? '' : 's20-dis') + '"><td><input type="checkbox" data-s="' + esc(S.name) + '"' + (ok ? '' : ' disabled') + (state.selected.has(S.name) ? ' checked' : '') + '></td>' +
           '<td><b>' + esc(S.name) + '</b></td><td class="s20-wrap">' + status + '</td><td>' + esc(S.enbName) + '</td><td class="s20-mono">' + esc(S.enbId) + '</td>' +
@@ -1153,7 +1261,8 @@
 
     var ft; $('.s20-filter').addEventListener('input', function () { clearTimeout(ft); ft = setTimeout(function () { state.touched = false; refresh(); }, 350); });
     $('.s20-all').addEventListener('click', function () { state.touched = true; state.rows.forEach(function (r) { if (!r.S.errors.length) state.selected.add(r.S.name); }); refresh(); });
-    $('.s20-clear').addEventListener('click', function () { $('.s20-filter').value = ''; state.touched = false; refresh(); });
+    $('.s20-clear').addEventListener('click', function () { $('.s20-filter').value = ''; state.autoList = null; state.touched = false; refresh(); });
+    $('.s20-list').addEventListener('click', function () { autoList(true); refresh(); });
     $('.s20-none').addEventListener('click', function () { state.touched = true; state.selected.clear(); refresh(); });
 
     $('.s20-go').addEventListener('click', function () {

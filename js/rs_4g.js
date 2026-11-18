@@ -568,7 +568,10 @@
     "#pane-rs4g .kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 14px;margin:6px 0}",
     "#pane-rs4g .kv div{font-size:12.5px}#pane-rs4g .kv b{display:block;font-size:11px;color:#667085;font-weight:600;text-transform:uppercase;letter-spacing:.02em}",
     "#pane-rs4g .radio{display:flex;gap:10px;flex-wrap:wrap}#pane-rs4g .radio label{display:flex;gap:4px;align-items:center;font-weight:600}",
-    "#pane-rs4g .need{outline:2px solid #e3a008;border-radius:6px;padding:2px 6px;background:#fff8e1}"
+    "#pane-rs4g .need{outline:2px solid #e3a008;border-radius:6px;padding:2px 6px;background:#fff8e1}",
+    "#pane-rs4g .r4-list{width:100%;margin-top:8px;font:13px/1.5 Consolas,'Courier New',monospace;border:1px solid var(--border);border-radius:6px;padding:4px;background:var(--surface);color:var(--text)}",
+    "#pane-rs4g .r4-list option{padding:2px 6px;border-radius:4px;cursor:pointer}",
+    "#pane-rs4g .r4-listinfo{font-size:12.5px;margin-top:4px}"
   ].join("\n");
   document.head.appendChild(css);
 
@@ -582,14 +585,16 @@
     '<p class="muted" style="margin:0 0 6px">Arquivo <i>MOU_VIVO_TIM_4G - Base de Dados</i> (.xlsb). Fica guardado neste navegador — carregue de novo quando sair versão nova.</p>' +
     '<div class="row"><input type="file" id="r4MouFile" accept=".xlsb,.xlsx,.xlsm"></div><div id="r4MouSt" class="muted" style="font-size:12.5px"></div></section>' +
     '<section class="card"><h2><span class="n">2</span>Site</h2>' +
-    '<div class="row"><input id="r4Site" placeholder="SR-XXXXXX" style="width:160px"><button class="ghost" type="button" id="r4Find">Buscar na planilha</button>' +
-    '<button class="ghost" type="button" id="r4UseLoaded">Usar o site da Entrada</button><span id="r4SiteSt"></span></div><div id="r4Plan"></div></section>' +
+    '<div class="row"><input id="r4Site" list="r4SiteDl" placeholder="SR-XXXXXX" autocomplete="off" style="width:160px"><datalist id="r4SiteDl"></datalist><button class="ghost" type="button" id="r4Find">Buscar na planilha</button>' +
+    '<button class="ghost" type="button" id="r4UseLoaded">Usar o site da Entrada</button><span id="r4SiteSt"></span></div>' +
+    '<select id="r4SiteList" class="r4-list" size="8" title="Sites da planilha MOU — clique para escolher"></select><div id="r4ListInfo" class="r4-listinfo muted"></div>' +
+    '<div id="r4Plan"></div></section>' +
     '</div>' +
     '<section class="card"><h2><span class="n">3</span>Leitura RS do site</h2>' +
-    '<p class="muted" style="margin:0 0 6px">Células, setores e RRUs vêm da <b>Entrada</b> (rodada 1). Estes comandos completam o que o RS precisa — rode pelo botão (helper) ou cole a resposta.</p>' +
+    '<p class="muted" style="margin:0 0 6px">O botão <b>Ler do MAE</b> primeiro carrega o site completo na aba <b>Entrada</b> (Rodada 1 + Rodada 2: células, setores e RRUs) e depois roda os comandos ao lado, que completam o que o RS precisa. Também dá para colar a resposta.</p>' +
     '<div class="r4-two"><div class="cmd-block"><pre id="r4Cmds"></pre><button class="copy-btn" type="button" id="r4CmdsCopy">Copiar</button></div>' +
     '<div><textarea id="r4Read" placeholder="Cole aqui as respostas dos comandos ao lado (ou use Ler do MAE)"></textarea>' +
-    '<div class="row"><button class="primary" type="button" id="r4ReadMae">▶ Ler do MAE</button><button class="ghost" type="button" id="r4ReadGo">Processar colado</button>' +
+    '<div class="row"><button class="primary" type="button" id="r4ReadMae">▶ Ler do MAE (Entrada + RS)</button><button class="ghost" type="button" id="r4ReadGo">Processar colado</button>' +
     '<button class="ghost" type="button" id="r4ReadClr">Limpar</button><span id="r4ReadSt" class="muted" style="font-size:12.5px"></span></div></div></div>' +
     '<div id="r4ReadSum"></div></section>' +
     '<section class="card"><h2><span class="n">4</span>Conferência site × planilha</h2><div id="r4Chk"></div></section>' +
@@ -608,6 +613,37 @@
   var M = null;
   function chip(c, t) { return '<span class="chip ' + c + '">' + esc(t) + "</span>"; }
   function arrow(a, b) { return a === b || !b ? '<span class="same">' + esc(a || "—") + "</span>" : esc(a || "—") + ' <span class="arrow">→ ' + esc(b) + "</span>"; }
+
+  // ---------------------------------------------------------------- lista de sites da planilha MOU
+  var SITES = [];
+  function buildSites() {
+    var by = {};
+    SITES = [];
+    if (!MOU) return;
+    MOU.rows.forEach(function (r) {
+      var nm = (r.ne && r.ne !== "-") ? r.ne : r.enb, k = core(nm);
+      if (!k || k === "-") return;
+      var e = by[k];
+      if (!e) { e = by[k] = { name: nm.toUpperCase(), uf: (r.uf || "").toUpperCase(), city: r.mun || "", status: r.status || "", ced: r.ced || "", cells: 0 }; SITES.push(e); }
+      e.cells++;
+    });
+    SITES.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+    $("r4SiteDl").innerHTML = SITES.map(function (e) { return '<option value="' + esc(e.name) + '">' + esc([e.uf, e.city, e.status].filter(Boolean).join(" · ")) + "</option>"; }).join("");
+  }
+  function drawList() {
+    var box = $("r4SiteList"), info = $("r4ListInfo");
+    if (!MOU) { box.innerHTML = ""; box.style.display = "none"; info.textContent = ""; return; }
+    box.style.display = "";
+    var q = core($("r4Site").value), sel = core(S.site);
+    var l = q && q !== sel ? SITES.filter(function (e) { return core(e.name).indexOf(q) >= 0; }) : SITES;
+    var MAX = 3000, shown = l.slice(0, MAX);
+    box.innerHTML = shown.map(function (e) {
+      var lbl = e.name + "   " + [e.uf, e.city, e.ced ? "cedente " + e.ced : "", e.status].filter(Boolean).join(" · ") + "   (" + e.cells + " cél.)";
+      return '<option value="' + esc(e.name) + '"' + (core(e.name) === sel ? " selected" : "") + ">" + esc(lbl) + "</option>";
+    }).join("");
+    info.textContent = SITES.length + " sites na planilha" + (l.length !== SITES.length ? " · " + l.length + " com “" + $("r4Site").value.trim().toUpperCase() + "”" : "") +
+      (l.length > MAX ? " · mostrando os " + MAX + " primeiros — digite parte do nome para filtrar" : "") + " · clique num site para abrir";
+  }
 
   function mouStatus() {
     $("r4MouSt").innerHTML = MOU ? chip("ok", "carregada") + " " + esc(MOU.file) + " · " + MOU.rows.length + " linhas · " + Object.keys(MOU.mnc || {}).length + " UFs no MNC · " + new Date(MOU.at).toLocaleString("pt-BR")
@@ -789,11 +825,18 @@
       $("r4ReadSt").textContent = st ? "leitura salva de " + st.at : "";
     }
     $("r4SiteSt").innerHTML = "";
+    drawList();
     render();
   }
   function saveRead() { if (S.site) lsSet(LS_READ + core(S.site), { t: S.readText, at: S.readAt }); }
   $("r4Find").addEventListener("click", function () { setSite($("r4Site").value); });
   $("r4Site").addEventListener("keydown", function (e) { if (e.key === "Enter") setSite(this.value); });
+  var lt; $("r4Site").addEventListener("input", function () {
+    var v = this.value; clearTimeout(lt);
+    if (SITES.some(function (e) { return e.name === v.trim().toUpperCase(); })) { setSite(v); return; }   // escolhido na sugestão
+    lt = setTimeout(drawList, 200);
+  });
+  $("r4SiteList").addEventListener("change", function () { if (this.value) setSite(this.value); });
   $("r4UseLoaded").addEventListener("click", function () { var n = loadedSite(); if (n) setSite(n); else $("r4SiteSt").innerHTML = chip("wa", "nenhum site carregado na Entrada"); });
   $("r4ReadGo").addEventListener("click", function () { S.readText = $("r4Read").value; S.readAt = now(); saveRead(); $("r4ReadSt").textContent = "processado " + S.readAt; render(); });
   $("r4ReadClr").addEventListener("click", function () { $("r4Read").value = ""; S.readText = ""; S.readAt = ""; saveRead(); $("r4ReadSt").textContent = ""; render(); });
@@ -810,7 +853,18 @@
     var s = window.MAE.state();
     if (!s.online || !s.logged) { st.textContent = "Conecte no MAE (aba Entrada → Executar no MAE)."; return; }
     if (s.busy) { st.textContent = "O painel do MAE está ocupado — tente em instantes."; return; }
-    btn.disabled = true; st.textContent = "lendo " + ne + " (" + READ_CMDS.length + " comandos)…";
+    btn.disabled = true;
+    var entMsg = "";
+    // 1) carrega o site completo na aba Entrada (Rodada 1 + Rodada 2), como o "Confirmar" do painel do MAE
+    if (window.MAE.loadSite) {
+      st.textContent = "carregando " + ne + " na aba Entrada (Rodada 1 + Rodada 2)…";
+      var le = await window.MAE.loadSite(ne, true).catch(function (e) { return { ok: false, error: e.message }; });
+      entMsg = le && le.ok ? "Entrada carregada · " : "⚠ Entrada: " + ((le && le.error) || "falhou") + " · ";
+      if (le && le.ne) ne = le.ne;
+      for (var w = 0; window.MAE.state().busy && w < 40; w++) await new Promise(function (r) { setTimeout(r, 250); });
+    }
+    // 2) comandos extras do RS
+    st.textContent = entMsg + "lendo " + ne + " (" + READ_CMDS.length + " comandos RS)…";
     window.MAE.setBusy(true);
     try {
       var r = await call("/run", { ne: ne, cmds: READ_CMDS });
@@ -819,8 +873,8 @@
       var txt = r.j.filter(function (y) { return !/^(REG|UNREG) NE/i.test(y.cmd || ""); }).map(function (y) { return "%%/*0*/" + (y.cmd || "") + "%%\n" + (y.resp || ""); }).join("\n");
       $("r4Read").value = txt; S.readText = txt; S.readAt = now(); saveRead();
       if (core(ne) !== core(S.site)) S.site = ne.toUpperCase();
-      st.textContent = "lido do MAE " + S.readAt; render();
-    } catch (e) { st.textContent = "✖ " + e.message; }
+      st.textContent = entMsg + "RS lido do MAE " + S.readAt; drawList(); render();
+    } catch (e) { st.textContent = entMsg + "✖ " + e.message; }
     finally { await call("/unreg", {}).catch(function () {}); window.MAE.setBusy(false); btn.disabled = false; }
   });
 
@@ -831,7 +885,7 @@
     f.arrayBuffer().then(function (ab) {
       return new Promise(function (res) { setTimeout(res, 30); }).then(function () { return parseMou(ab, f.name); });
     }).then(function (m) {
-      MOU = m; indexMou(); mouStatus(); render();
+      MOU = m; indexMou(); buildSites(); drawList(); mouStatus(); render();
       window.dispatchEvent(new Event("rs4g:mou"));
       return idbSet("mou", m).catch(function () { $("r4MouSt").innerHTML += " " + chip("wa", "não consegui guardar no navegador — carregue de novo na próxima vez"); });
     }).catch(function (e) { $("r4MouSt").innerHTML = chip("er", "erro") + " " + esc(e.message); })
@@ -861,9 +915,9 @@
     _t: { parseMou: parseMou, readAll: readAll, model: function () { return model(); }, script: function () { return script(model()); }, state: S }
   };
 
-  mouStatus(); render();
+  mouStatus(); drawList(); render();
   idbGet("mou").then(function (m) {
-    if (m && m.rows) { MOU = m; indexMou(); mouStatus(); render(); window.dispatchEvent(new Event("rs4g:mou")); }
+    if (m && m.rows) { MOU = m; indexMou(); buildSites(); drawList(); mouStatus(); render(); window.dispatchEvent(new Event("rs4g:mou")); }
   }).catch(function () {});
   if (loadedSite()) onLoaded();
 })();

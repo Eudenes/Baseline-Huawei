@@ -186,12 +186,16 @@
     return resp.join("\n");
   }
 
-  async function go(both) {
+  // neArg: site vindo de outra aba (ex.: RS_4G). Retorna { ok, error } para quem chamou.
+  async function go(both, neArg) {
+    if (neArg) $("maeSite").value = String(neArg).trim();
     var ne = $("maeSite").value.trim();
-    if (!ne) { alert("Escolha um site."); $("maeSite").focus(); return; }
+    if (!ne) { if (!neArg) { alert("Escolha um site."); $("maeSite").focus(); } return { ok: false, error: "Escolha um site." }; }
+    if (busy) return { ok: false, error: "O painel do MAE está ocupado." };
     var hit = neList.filter(function (n) { return n.name.toUpperCase() === ne.toUpperCase(); })[0];
     if (hit) { ne = hit.name; $("maeSite").value = ne; }
-    else if (neList.length && !confirm(ne + " não está na lista de NEs do MAE. Continuar mesmo assim?")) return;
+    else if (neList.length && !confirm(ne + " não está na lista de NEs do MAE. Continuar mesmo assim?")) return { ok: false, error: "Cancelado pelo usuário." };
+    var result = { ok: true, ne: ne };
     var c1 = cmdsFrom("uniCmds");
     abort = false; busy = true; transcript = []; refresh();
     var t0 = Date.now();
@@ -202,7 +206,7 @@
       $("uniIn").dispatchEvent(new Event("input", { bubbles: true }));
       $("uniGo").click();
       log("Rodada 1 colada e processada.", "ok");
-      if (!both) { log("Concluído (só Rodada 1) em " + Math.round((Date.now() - t0) / 1000) + " s.", "ok"); return; }
+      if (!both) { log("Concluído (só Rodada 1) em " + Math.round((Date.now() - t0) / 1000) + " s.", "ok"); return result; }
 
       // ---- Rodada 2 ----
       await sleep(50);
@@ -211,7 +215,7 @@
         throw new Error("A Rodada 1 não gerou a Rodada 2" + (m ? ": " + m : "."));
       }
       var c2 = cmdsFrom("cmdsRound2");
-      if (!c2.length) { log("Rodada 2 sem comandos — fim.", "in"); return; }
+      if (!c2.length) { log("Rodada 2 sem comandos — fim.", "in"); return result; }
       if (abort) throw new Error("Interrompido pelo usuário antes da Rodada 2.");
       var txt2 = await runRound(ne, c2, "Rodada 2");
       $("in2").value = txt2;
@@ -220,10 +224,12 @@
       log("Rodada 2 colada e processada. " + ne + " concluído em " + Math.round((Date.now() - t0) / 1000) + " s ✅", "ok");
     } catch (e) {
       log(e.message, "er");
+      result = { ok: false, ne: ne, error: e.message };
     } finally {
       await api("/unreg", {}).catch(function () {});
       busy = false; refresh();
     }
+    return result;
   }
 
   function exportLog() {
@@ -300,6 +306,8 @@
     state: function () { return { online: online, logged: logged, busy: busy, user: $("maeUser").value, version: helperVersion }; },
     neList: function () { return neList; },
     setBusy: function (v) { busy = !!v; refresh(); },
+    // carrega o site na aba Entrada (Rodada 1 + Rodada 2) — usado pela aba RS_4G
+    loadSite: function (ne, both) { return go(both !== false, ne); },
     log: log
   };
 
