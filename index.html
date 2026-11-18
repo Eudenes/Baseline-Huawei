@@ -551,7 +551,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
 <header class="app-head">
   <div class="app-top">
     <img class="app-logo" src="https://i.imgur.com/S6EvitM.png" alt="RF Team by Telebit" onerror="this.style.display='none'">
-    <div class="app-title"><h1>TELEBIT RAN - Ferramenta Huawei</h1><span>Inter-Freq &amp; CA · Placas &amp; Células · Dimensionamento BBP · Conexão física · Baseline · Potência · Relatórios de RanSharing · BKP, CFGFILE e SW · RS_4G · Planilha SRAN20</span></div>
+    <div class="app-title"><h1>TELEBIT RAN - Ferramenta Huawei</h1><span>Inter-Freq &amp; CA · Placas &amp; Células · Dimensionamento BBP · Conexão física · Baseline · Potência · Relatórios de RanSharing · BKP, CFGFILE e SW · RS_4G · Planilha SRAN20 · 3G/4G puro → SRAN</span></div>
     <div class="app-ne"><label for="histQuick" class="muted" style="color:#cfd5e2">Site:</label><select id="histQuick" aria-label="Abrir site do histórico"><option value="">— histórico —</option></select><span id="neLbl"></span></div>
   </div>
   <nav class="app-tabs" role="tablist" aria-label="Ferramentas">
@@ -566,6 +566,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
     <button type="button" class="app-tab" role="tab" id="tab-rs" aria-controls="pane-rs" aria-selected="false"><span class="tn">9</span>Relatórios de RanSharing<span class="bdg" id="bdg-rs"></span></button>
     <button type="button" class="app-tab" role="tab" id="tab-rs4g" aria-controls="pane-rs4g" aria-selected="false"><span class="tn">10</span>RS_4G<span class="bdg" id="bdg-rs4g"></span></button>
     <button type="button" class="app-tab" role="tab" id="tab-s20" aria-controls="pane-s20" aria-selected="false"><span class="tn">11</span>Planilha SRAN20<span class="bdg" id="bdg-s20"></span></button>
+    <button type="button" class="app-tab" role="tab" id="tab-s4g" aria-controls="pane-s4g" aria-selected="false"><span class="tn">12</span>3G/4G puro → SRAN<span class="bdg" id="bdg-s4g"></span></button>
   </nav>
 </header>
 
@@ -1682,6 +1683,9 @@ MOD NRDUCELLPUSCH:NRDUCELLID=11,ULSMARTPREALLOCATIONDUR=250;
 
 <!-- ================= ABA 11 — PLANILHA SRAN20 (conteúdo montado por js/sran20.js) ================= -->
 <div class="pane scB" id="pane-s20" role="tabpanel" aria-labelledby="tab-s20" hidden></div>
+
+<!-- ================= ABA 12 — 3G/4G PURO → SRAN (conteúdo montado por js/sran_conv.js e js/sran_3g.js) ================= -->
+<div class="pane scB" id="pane-s4g" role="tabpanel" aria-labelledby="tab-s4g" hidden></div>
 
 </main>
 
@@ -4738,7 +4742,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
-  var TABS = ["in", "sw", "ca", "pl", "ph", "pw", "bl", "doc", "rs", "rs4g", "s20"];
+  var TABS = ["in", "sw", "ca", "pl", "ph", "pw", "bl", "doc", "rs", "rs4g", "s20", "s4g"];
   var CA_CMDS = ["DSP CELL:;", "LST EUTRANINTERNFREQ:;", "LST UTRANNFREQ:;", "LST EUTRANINTERFREQNCELL:;", "LST EUTRANEXTERNALCELL:;", "LST PCCFREQCFG:;", "LST SCCFREQCFG:;", "LST ENODEBFUNCTION:;", "LST GNODEBFUNCTION:;", "LST CNOPERATORTA:;", "LST GNBTRACKINGAREA:;"];
   var ALL_CMDS = (window.PL_TOOL.cmds || []).slice();
   CA_CMDS.concat(["LST PDSCHCFG:;", "LST CELLDLPCPDSCHPA:;"]).forEach(function (c) { if (ALL_CMDS.indexOf(c) === -1) ALL_CMDS.push(c); });
@@ -5536,5 +5540,8 @@ PAIRS.forEach(function(p){var src=$(p[0]),dst=$(p[1]);if(!src||!dst)return;
 <script src="js/sw_cfgfile.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="js/sran20.js"></script>
+<script src="js/sran_conv.js"></script>
+<script src="js/sran_3g_model.js"></script>
+<script src="js/sran_3g.js"></script>
 </body>
 </html>
