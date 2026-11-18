@@ -98,12 +98,11 @@ da conexão feita no painel **Executar no MAE** da aba Entrada. Sub-abas: **Soft
 - **CFGFILE** — envia um XML ao servidor de arquivos (FTP ou SFTP, pelo helper), confere o tamanho e só
   então libera o `DLD CFGFILE`. O servidor do **upload** (padrão `10.220.30.9`, SFTP 22) e o IP que vai
   **no comando** (padrão `10.220.4.134`, visto só pelos sites) são campos diferentes.
-- **3G puro (WCDMA)** — antes de todo ULD/DLD (BKP XML, DLD CFGFILE, DLD/SPL SOFTWARE e o backup das abas 12)
-  a aba roda `LST NODE:;` no site. Product Type com **WCDMA** e sem LTE = 3G puro: o comando vai com
-  `IP="10.220.30.134"`, `USR="ftpuser"` e o lado do PC (upload, conferência e renomeio do arquivo) usa o mesmo
-  servidor por SFTP 22 — mesma senha e mesmo DIR. Os dois valores ficam na barra **📡 3G puro (WCDMA)** no topo da aba.
-  No CFGFILE o XML é enviado para o servidor certo conforme o site no topo da aba; se o site do DLD não bater
-  com o servidor onde o XML está, a aba pede para enviar de novo.
+- **3G puro (WCDMA)** — antes de todo ULD/DLD (BKP XML, DLD CFGFILE, DLD/SPL SOFTWARE e o backup da aba 12)
+  a aba roda `LST NODE:;` no site. Product Type com **WCDMA** e sem LTE = 3G puro: só o comando do site muda,
+  com `IP="10.220.30.134"` e `USR="ftpuser"` (mesma senha e DIR). O lado do PC (conferir a pasta, renomear o
+  arquivo, upload do XML) continua no servidor de sempre (`10.220.30.9`). Os dois valores ficam na barra
+  **📡 3G puro (WCDMA)** no topo da aba.
 - **BKP** — `LST NODE:;` escolhe a lista de logs pelo *Product Type* (tem WCDMA → WCDMA; tem LTE → LTE;
   senão → SRAN; dá para forçar), roda a lista e salva `<SITE>_LOGS_<data>.txt`; depois
   `BKP CFGFILE:ENCRYPTMODE=UNENCRYPTED;` → `LST CFGFILE:;` → `SET FTPSCLT` → `ULD CFGFILE` para

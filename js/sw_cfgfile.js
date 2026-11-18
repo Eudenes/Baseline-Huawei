@@ -162,10 +162,10 @@
     '</div>' +
     '<div class="sw-pw" id="swWcBar">' +
       '<b>📡 3G puro (WCDMA)</b>' +
-      '<label class="sw-wc">SFTP <input type="text" id="wcIp" class="mono" spellcheck="false" autocomplete="off" style="width:140px"></label>' +
+      '<label class="sw-wc">IP no comando <input type="text" id="wcIp" class="mono" spellcheck="false" autocomplete="off" style="width:140px"></label>' +
       '<label class="sw-wc">usuário <input type="text" id="wcUser" spellcheck="false" autocomplete="off" style="width:90px"></label>' +
       '<span id="wcSt" class="sw-chip c-no">tipo do site: —</span>' +
-      '<span class="sw-note" style="margin:0">Site com Product Type <b>WCDMA</b> (sem LTE) faz ULD/DLD por este servidor, no comando e no PC (SFTP 22, mesma senha e DIR). O tipo é lido com <span class="mono">LST NODE</span> antes de cada ULD/DLD.</span>' +
+      '<span class="sw-note" style="margin:0">Site com Product Type <b>WCDMA</b> (sem LTE): o comando ULD/DLD vai com este IP e usuário (mesma senha e DIR). Do lado deste PC (conferir pasta, renomear, upload) nada muda. O tipo é lido com <span class="mono">LST NODE</span> antes de cada ULD/DLD.</span>' +
     '</div>' +
     '<div class="sw-warn" id="swOld" hidden>⚠ O helper deste PC é antigo e não tem as funções desta aba. <a id="swInst" download="Instalar_Helper_MML.bat" href="tools/Instalar_Helper_MML.bat"><b>Baixar o instalador atualizado</b></a>, abrir o arquivo e aguardar o “PRONTO”.</div>' +
     '<div id="swJobs"></div>' +
@@ -497,20 +497,20 @@
   //  TAREFAS (comandos demorados no helper)
   // =====================================================================
   var jobs = {};          // id -> { v: visão do helper, log: entrada do log, kind }
-  // ---------- 3G puro (WCDMA): ULD/DLD pelo servidor SFTP próprio (comando do site e lado do PC) ----------
+  // ---------- 3G puro (WCDMA): ULD/DLD com IP/USR próprios só no comando do site (o lado do PC não muda) ----------
   // O LST NE só traz "BTS3900NE"; quem diz se é 3G puro é o Product Type do LST NODE (WCDMA sem LTE, igual ao helper).
   var ptCache = {};
   function ptKind(pt) { var up = String(pt || "").toUpperCase(), w = /WCDMA|UMTS/.test(up), l = /LTE/.test(up); return w && !l ? "WCDMA" : (l && !w ? "LTE" : "SRAN"); }
   function wcSrv() {
     var ip = need(clean($("wcIp").value, "SFTP do 3G puro"), "SFTP do 3G puro (WCDMA) no topo da aba"), u = need(clean($("wcUser").value, "usuário do 3G puro"), "usuário do 3G puro (WCDMA) no topo da aba");
-    return { ip: ip, usr: u, host: ip, proto: "SFTP", port: 22, fsUser: u };
+    return { ip: ip, usr: u };
   }
   function wcShow(n, K) {
     var el = $("wcSt"); if (!el) return;
     if (!K) { el.className = "sw-chip c-no"; el.textContent = "tipo do site: —"; return; }
     var w = K.kind === "WCDMA";
     el.className = "sw-chip " + (w ? "c-wt" : "c-ok");
-    el.textContent = n + ": " + (K.pt || K.kind) + (w ? " → 3G puro: " + $("wcIp").value.trim() + " / " + $("wcUser").value.trim() : " → servidor padrão");
+    el.textContent = n + ": " + (K.pt || K.kind) + (w ? " → 3G puro: comando com " + $("wcIp").value.trim() + " / " + $("wcUser").value.trim() : " → IP padrão no comando");
   }
   // force = "WCDMA" | "SRAN" | "LTE" pula a consulta (lista escolhida na sub-aba BKP).
   async function neKind(neName, force) {
@@ -530,12 +530,12 @@
       ptCache[key] = K; wcShow(neName, K); return K;
     } catch (e) {
       $("wcSt").className = "sw-chip c-er"; $("wcSt").textContent = "tipo do site: não lido";
-      throw new Error("Não consegui ler o tipo do site (" + e.message + "). Sem ele não dá para escolher o servidor (3G puro usa " + $("wcIp").value.trim() + ").");
+      throw new Error("Não consegui ler o tipo do site (" + e.message + "). Sem ele não dá para escolher o IP do comando (3G puro usa " + $("wcIp").value.trim() + ").");
     } finally { await call("/unreg", {}).catch(function () {}); window.MAE.setBusy(false); }
   }
-  function useWc(o) { var s = wcSrv(); o.ip = s.ip; o.usr = s.usr; o.host = s.host; o.proto = s.proto; o.port = s.port; o.fsUser = s.fsUser; o.wcdma = true; return o; }
+  function useWc(o) { var s = wcSrv(); o.ip = s.ip; o.usr = s.usr; o.wcdma = true; return o; }
   function kindHtml(K, wc) {
-    return '<dt>Tipo do site</dt><dd>' + esc(K.why) + (wc ? ' → <b>3G puro</b>: servidor <span class="mono">' + esc($("wcIp").value.trim()) + '</span> (' + esc($("wcUser").value.trim()) + ')' : ' → servidor padrão') + '</dd>';
+    return '<dt>Tipo do site</dt><dd>' + esc(K.why) + (wc ? ' → <b>3G puro</b>: no comando IP <span class="mono">' + esc($("wcIp").value.trim()) + '</span>, USR ' + esc($("wcUser").value.trim()) : ' → IP padrão no comando') + '</dd>';
   }
 
   function settings() {
@@ -898,16 +898,8 @@
     $("cfOut").innerHTML = h;
   }));
 
-  // CFGFILE: se o site do topo for 3G puro (WCDMA), o XML vai/está no servidor do 3G puro
-  async function cfServer(b) {
-    var n = ne(), st = conn();
-    if (!n || !st.logged) return { wcdma: false, known: false, b: b };
-    var K = await neKind(n);
-    if (K.kind === "WCDMA") { var w = wcSrv(); b.host = w.host; b.protocol = w.proto; b.port = w.port; b.user = w.fsUser; }
-    return { wcdma: K.kind === "WCDMA", known: true, ne: n, b: b };
-  }
   $("cfList").addEventListener("click", guard(async function () {
-    ready(); var b = fsBody(), S = await cfServer(b);
+    ready(); var b = fsBody();
     $("cfOut").innerHTML = '<p class="sw-note">Listando ' + esc(b.dir) + '…</p>';
     var e = addLog({ op: "Listar diretório", server: b.host, item: b.dir, state: "running" });
     var r = await call("/file-server/list", b);
@@ -921,13 +913,12 @@
           (isX ? '<button class="ghost" type="button" style="padding:3px 10px" data-use="' + esc(x.name) + '" data-size="' + x.size + '">Usar este</button>' : '') + '</td></tr>';
       }).join("") : '<tr><td colspan="4" class="muted">pasta vazia</td></tr>') + '</tbody></table></div>';
     $("cfOut").setAttribute("data-dir", r.j.dir);
-    $("cfOut").setAttribute("data-wc", S.wcdma ? "1" : "");
   }));
   $("cfOut").addEventListener("click", function (ev) {
     var n = ev.target.getAttribute("data-use"); if (!n) return;
     var d = $("cfOut").getAttribute("data-dir") || $("cfDir").value;
     $("cfName").value = n;
-    up = { remotePath: d.replace(/\/+$/, "") + "/" + n, fileName: n, bytes: parseInt(ev.target.getAttribute("data-size"), 10) || 0, existing: true, wcdma: $("cfOut").getAttribute("data-wc") === "1" };
+    up = { remotePath: d.replace(/\/+$/, "") + "/" + n, fileName: n, bytes: parseInt(ev.target.getAttribute("data-size"), 10) || 0, existing: true };
     cfgCmd = ""; $("rsCmd").textContent = "—";
     $("rsUp").innerHTML = chip("c-ok", "já está no servidor") + " " + esc(n) + " (" + fmtBytes(up.bytes) + ") — conferido na listagem";
     gate();
@@ -948,7 +939,6 @@
     if (!/\.xml$/i.test(f.name)) throw new Error("Somente arquivos .xml são aceitos.");
     if (!f.size) throw new Error("O arquivo está vazio.");
     var b = fsBody(); b.name = nameOk($("cfName").value.trim());
-    var S = await cfServer(b);
     up = null; cfgCmd = ""; gate(); $("rsCmd").textContent = "—";
     var e = addLog({ op: "Enviar XML", server: b.protocol + " " + b.host + ":" + b.port, item: b.name + " (" + fmtBytes(f.size) + ")", state: "sending" });
     $("rsUp").innerHTML = chip("c-run", "enviando") + " " + esc(b.name) + " (" + fmtBytes(f.size) + ")…";
@@ -969,17 +959,18 @@
     }
     if (r.status !== 200 || !r.j.ok) { fail(errMsg(r)); return; }
     var j = r.j;
-    up = { remotePath: j.remotePath, fileName: j.fileName, bytes: j.bytes, wcdma: S.wcdma };
+    up = { remotePath: j.remotePath, fileName: j.fileName, bytes: j.bytes };
     e.state = "sent"; e.summary = j.message + (j.overwritten ? " · sobrescreveu o anterior" : ""); drawLogs();
     $("rsUp").innerHTML = chip("c-ok", "enviado") + " " + fmtBytes(j.bytes) + " por " + j.protocol + " em " + esc(j.host) + ":" + j.port + " — " + esc(j.message) + (j.overwritten ? " · sobrescreveu o anterior" : "") +
-      (j.sizeChecked ? " · tamanho conferido" : "") + (S.wcdma ? " · <b>3G puro</b> (" + esc(S.ne) + ")" : "");
+      (j.sizeChecked ? " · tamanho conferido" : "");
     gate();
   }));
 
+  var cfgWc = false;          // site do DLD é 3G puro → IP/USR do 3G puro no comando
   function cfgBuild(real) {
     if (!up) throw new Error("Envie o XML (ou escolha um já existente em “Listar diretório”) antes de gerar o comando.");
     var pw = real ? ($("ccSame").checked ? pwOf("cfPwd", "servidor de arquivos, usada no comando") : pwOf("ccPwd", "PWD no comando")) : "********";
-    var W = up.wcdma ? wcSrv() : null;
+    var W = cfgWc ? wcSrv() : null;
     return 'DLD CFGFILE: MODE=IPV4, IP="' + (W ? W.ip : need(clean($("ccIp").value, "IP no comando"), "IP no comando")) + '", USR="' + (W ? W.usr : need(clean($("ccUser").value, "USR no comando"), "USR no comando")) +
       '", PWD="' + clean(pw, "PWD") + '", DIR="' + need(clean($("ccDir").value, "DIR no comando"), "DIR no comando") + '", FN="' + clean(up.fileName, "nome do arquivo") +
       '", ENCRYPTMODE=' + need(clean($("ccEnc").value, "ENCRYPTMODE"), "ENCRYPTMODE") + ', FOCDLD=' + $("ccFoc").value + ';';
@@ -992,7 +983,7 @@
     $("rsCmd").textContent = FTPS + "\n" + mask(cfgCmd) + ($("ccAct").checked ? "\n" + ACT_CFG : "");
     gate();
   }
-  $("ccGen").addEventListener("click", guard(function () { showCfgCmd(); }));
+  $("ccGen").addEventListener("click", guard(function () { var k = ptCache[ne().toUpperCase()]; cfgWc = !!(k && k.kind === "WCDMA"); showCfgCmd(); }));
   $("ccAct").addEventListener("change", function () { if (cfgCmd) $("rsCmd").textContent = FTPS + "\n" + mask(cfgCmd) + (this.checked ? "\n" + ACT_CFG : ""); });
   $("ccCopy").addEventListener("click", function () { copy($("rsCmd").textContent, this); });
   function cfgWarn(neName, extra) {
@@ -1003,10 +994,7 @@
     var R = readyMml();
     if (!up) throw new Error("Envie o XML (ou escolha um já existente em “Listar diretório”) antes de executar.");
     var K = await neKind(R.ne), wc = K.kind === "WCDMA";
-    if (wc !== !!up.wcdma)
-      throw new Error(R.ne + (wc ? " é 3G puro (" + K.pt + "): o XML precisa estar no servidor " + $("wcIp").value.trim() : " não é 3G puro (" + (K.pt || K.kind) + "): o XML precisa estar no servidor padrão " + $("cfHost").value.trim()) +
-        ". Com o site no topo da aba, envie o XML de novo (passo 1) ou liste o diretório e use “Usar este”.");
-    showCfgCmd();
+    cfgWc = wc; showCfgCmd();
     var act = $("ccAct").checked;
     var html = (R.known ? "" : '<div class="dg">' + esc(R.ne) + ' não está na lista de NEs do MAE.</div>') +
       '<dl><dt>Site (NE)</dt><dd>' + esc(R.ne) + '</dd>' + kindHtml(K, wc) + '<dt>Arquivo</dt><dd>' + esc(up.remotePath) + '</dd></dl><pre>' + esc(FTPS + "\n" + mask(cfgCmd)) + '</pre>';
@@ -1088,7 +1076,7 @@
       var o = bkVals(false);
       if (o.xml && o.kind === "WCDMA") useWc(o);
       else if (o.xml && o.kind === "AUTO" && ptCache[site.toUpperCase()] && ptCache[site.toUpperCase()].kind === "WCDMA") useWc(o);
-      t = bkPrevText(o, site) + (o.xml && o.kind === "AUTO" && !o.wcdma ? "\n\n// Antes do backup XML vai um LST NODE: site 3G puro (Product Type WCDMA) usa o servidor " + $("wcIp").value.trim() + " (" + $("wcUser").value.trim() + ")." : "");
+      t = bkPrevText(o, site) + (o.xml && o.kind === "AUTO" && !o.wcdma ? "\n\n// Antes do backup XML vai um LST NODE: site 3G puro (Product Type WCDMA) leva IP=\"" + $("wcIp").value.trim() + "\", USR=\"" + $("wcUser").value.trim() + "\" no ULD." : "");
     } catch (e) { t = "⚠ " + e.message; }
     $("bkPrev").textContent = t;
     $("bkRun").textContent = "▶ Fazer backup" + (ne() ? " de " + ne() : "");
