@@ -71,6 +71,27 @@ python mml_helper_v2.py --mae 10.220.30.9:31114   # outro MAE
 python mml_helper_v2.py --port 8765               # outra porta local
 ```
 
+## RS_4G — etapa 0: TX VIVO (configurar e testar)
+
+Antes do RAN Sharing, a seção **0** da aba RS_4G monta e testa a transmissão da VIVO
+(roteiro da planilha *HUAWEI - Teste de TX RANSHARING*):
+
+- **a) Core VIVO** — MME/SGW por grupo de sites (aba 1 da planilha, embutida). O grupo é
+  achado pelo site → município → UF; dá para trocar à mão ou carregar uma planilha nova.
+- **b) ENG-SI** — lê os IPs da VIVO (VLAN, IP INFRA, máscara, gateway, S1/X2) do .xlsx ou de
+  linhas coladas. Valores marcados TIM, ou que já estão no LST DEVIP, não são usados.
+- **c) Leitura TX** — `LST DEVIP/VLANMAP/IPRT/SCTPHOST/USERPLANEHOST/OMCH…` (Ler TX do MAE ou colar).
+
+O script segue a ordem VLANMAP → DEVIP (ETH + loopback) → SCTPHOST S1/X2 → USERPLANEHOST →
+IPRT (/16 por destino, sem duplicar) → PING. Placa (SN) e ETHport vêm do LST DEVIP; SCTPHOST,
+UPHOST e RTIDX ocupados são pulados; o que já existe vira comentário; sub-rede sobreposta,
+VLANMAP conflitante etc. bloqueiam a geração. IPs sem USER LABEL recebem sugestão, que só
+entra no script com "confirmo" (o Executar pede confirmação de novo).
+
+No **Executar no site** do script TX: para no 1º comando de configuração que falhar; cada
+PING roda sozinho e o resultado (OK/NOK, recebidos, perda) aparece na tabela da seção 0.
+O RAN Sharing (seções 1–7) passa a usar os MMEs do grupo e os SCTPHOST/UPHOST VIVO da etapa 0.
+
 ## KPIs MAE (aba Relatórios de RanSharing) — fase 1: descoberta no SFTP
 
 Painel **KPIs MAE · Explorar SFTP** no topo da aba Relatórios de RanSharing (recolhido por padrão). Precisa do

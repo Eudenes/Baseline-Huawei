@@ -19,10 +19,11 @@
     { id: "pwScript", after: "pwCopy",     name: "Potência · script" },
     { id: "pwRb",     after: "pwCopyRb",   name: "Potência · rollback", label: "▶ Executar rollback" },
     { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true },
-    { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script", guard: true }
+    { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script", guard: true },
+    { id: "r4TxOut",  after: "r4TxCopy",   name: "RS_4G · TX VIVO", guard: "tx", stopOnFail: true }
   ];
   var BATCH = 5;
-  var MML_RE = /^[A-Z][A-Z0-9]*\s+[A-Z0-9_]+\s*:.*;$/i;
+  var MML_RE = /^(?:[A-Z][A-Z0-9]*\s+[A-Z0-9_]+|PING)\s*:.*;$/i;       // PING não tem objeto ("PING:SN=...;")
   var PSEUDO_RE = /^#(WAIT|UNTIL)\b/i;
 
   // ---------- estilo ----------
@@ -94,7 +95,7 @@
   }
 
   // ---------- tela ----------
-  var ov = null, items = [], abort = false, running = false, field = null, ne = "", stopMsg = "", lastAid = "";
+  var ov = null, items = [], abort = false, running = false, field = null, ne = "", stopMsg = "", lastAid = "", labelOk = null;
   function openScreen(f, cmds, skipped) {
     field = f; ne = siteName(); abort = false;
     items = cmds.map(function (c, i) { return { idx: i, line: c.line, cmd: c.cmd, st: "pd", msg: "", msg1: "", resp: "" }; });
@@ -159,7 +160,49 @@
   // ---------- comandos vigiados (só no script RS_4G: field.guard) ----------
   // CFM CB: não pode falhar → 2ª tentativa com outro NAME → se falhar de novo, pergunta antes de seguir.
   // DSP APP: só segue com o Application State do eNodeB = Available; senão espera 20 s e consulta de novo.
-  function isGuard(it) { return !!(field && field.guard && /^(CFM\s+CB|DSP\s+APP)\s*:/i.test(it.cmd)); }
+  // TX VIVO (field.guard "tx"): PING roda sozinho e só depois sai o próximo (OK/NOK pela resposta);
+  // MOD DEVIP de USERLABEL só roda depois de confirmar.
+  function isPing(it) { return /^PING\s*:/i.test(it.cmd); }
+  function isLabel(it) { return /^MOD\s+DEVIP\s*:.*USERLABEL\s*=/i.test(it.cmd); }
+  function isGuard(it) {
+    if (!field || !field.guard) return false;
+    if (field.guard === "tx") return isPing(it) || isLabel(it);
+    return /^(CFM\s+CB|DSP\s+APP)\s*:/i.test(it.cmd);
+  }
+  function pingParse(resp) {
+    if (window.RS4G && window.RS4G.pingParse) return window.RS4G.pingParse(resp);
+    var ok = /RETCODE\s*=\s*0\b/.test(resp || "") && /reply from|bytes\s*=/i.test(resp || "");
+    return { known: /RETCODE/.test(resp || ""), ok: ok, msg: ok ? "OK" : retMsg(resp) || "NOK" };
+  }
+  async function guardPing(it) {
+    var dst = (/DSTIP\s*=\s*"?([\d.]+)/i.exec(it.cmd) || [])[1] || "";
+    var x = await runOne(it.cmd), resp = x.resp || "", r = pingParse(resp);
+    // se o resultado chegou depois do RETCODE, o helper entrega a sobra junto com a próxima resposta
+    for (var n = 1; !r.known && !/RETCODE\s*=\s*[1-9]/.test(resp) && n <= 4 && !abort; n++) {
+      it.msg = "aguardando o fim do PING (" + n + "/4)…"; setRow(it);
+      if (!(await sleep(5000))) break;
+      var y = await runOne("LST ENODEBFUNCTION:;");
+      var extra = String(y.resp || ""), cut = extra.search(/%%(?:\/\*\d+\*\/)?\s*LST\s+ENODEBFUNCTION/i);
+      resp += "\n" + (cut > 0 ? extra.slice(0, cut) : "");
+      r = pingParse(resp);
+    }
+    it.resp += resp;
+    it.st = r.ok ? "ok" : "er"; it.msg = (r.msg || (r.ok ? "OK" : "NOK")) + (dst ? " · " + dst : ""); setRow(it);
+    try { window.dispatchEvent(new CustomEvent("mae:ping", { detail: { ne: ne, ip: dst, ok: r.ok, msg: r.msg, resp: resp } })); } catch (e) {}
+    window.MAE.log("PING " + dst + " em " + ne + ": " + (r.msg || (r.ok ? "OK" : "NOK")), r.ok ? "ok" : "er");
+    return true;                                                   // PING NOK não para: segue para o próximo teste
+  }
+  async function guardLabel(it) {
+    if (labelOk === null) {
+      var l = items.filter(isLabel).map(function (x) { return "  " + x.cmd; });
+      labelOk = confirm("Ajustar o USER LABEL de " + l.length + " IP(s) em " + ne + "?\n\n" + l.join("\n") + "\n\nOK = executar · Cancelar = pular só estes MOD DEVIP");
+    }
+    if (!labelOk) { it.st = "pd"; it.msg = "pulado (USER LABEL não confirmado)"; setRow(it); return true; }
+    var x = await runOne(it.cmd);
+    it.resp += x.resp || ""; it.st = x.ok ? "ok" : "er"; it.msg = x.ok ? "" : retMsg(x.resp); setRow(it);
+    if (!x.ok && field.stopOnFail) { stopMsg = "Parado: " + it.cmd + " falhou (" + it.msg + ")."; return false; }
+    return true;
+  }
   function sleep(ms) {
     return new Promise(function (res) {
       var t0 = Date.now(), h = setInterval(function () { if (abort || Date.now() - t0 >= ms) { clearInterval(h); res(!abort); } }, 250);
@@ -246,13 +289,14 @@
       if (phase === 1 && isGuard(list[i])) {
         var g = list[i]; g.st = "run"; setRow(g);
         var tg = $("mxr" + g.idx); if (tg && !$("mxOnlyFail").checked) tg.scrollIntoView({ block: "nearest" });
-        var go = /^CFM/i.test(g.cmd) ? await guardCfm(g) : await guardApp(g);
+        var go = isPing(g) && field.guard === "tx" ? await guardPing(g) : isLabel(g) && field.guard === "tx" ? await guardLabel(g) : /^CFM/i.test(g.cmd) ? await guardCfm(g) : await guardApp(g);
         i++; stats(phase, i, list.length);
         if (!go) { abort = true; return false; }
         continue;
       }
       var part = [];
-      while (i < list.length && part.length < BATCH && !(phase === 1 && isGuard(list[i]))) part.push(list[i++]);
+      var bs = field.stopOnFail ? 1 : BATCH;                       // TX: um por vez, para parar no 1º erro
+      while (i < list.length && part.length < bs && !(phase === 1 && isGuard(list[i]))) part.push(list[i++]);
       part.forEach(function (it) { it.st = "run"; setRow(it); var m = /^RST\s+APP\s*:.*AID\s*=\s*(\d+)/i.exec(it.cmd); if (m) lastAid = m[1]; });
       var tr = $("mxr" + part[0].idx); if (tr && !$("mxOnlyFail").checked) tr.scrollIntoView({ block: "nearest" });
       var r;
@@ -274,6 +318,8 @@
         setRow(it);
       });
       stats(phase, i, list.length);
+      var bad = field.stopOnFail && phase === 1 ? part.filter(function (it) { return it.st === "er" && !/^#/.test(it.cmd); })[0] : null;
+      if (bad) { stopMsg = "Parado no 1º erro: " + bad.cmd + " → " + bad.msg + ". Corrija e execute de novo (o que já foi criado aparece como “já existe” depois de Ler TX do MAE)."; abort = true; return false; }
     }
     return true;
   }
@@ -283,7 +329,7 @@
     if (!s.online || !s.logged) { alert("Conecte no painel \"Executar no MAE\" (aba Entrada) primeiro."); return; }
     for (var w = 0; w < 40 && window.MAE.state().busy; w++) await new Promise(function (r) { setTimeout(r, 250); });
     if (window.MAE.state().busy) { alert("O painel do MAE já está executando algo. Aguarde terminar."); return; }
-    running = true; window.MAE.setBusy(true); stopMsg = ""; lastAid = "";
+    running = true; window.MAE.setBusy(true); stopMsg = ""; lastAid = ""; labelOk = null;
     $("mxGo").disabled = true; $("mxGo").textContent = "Executando…"; $("mxStop").disabled = false; $("mxClose").textContent = "Fechar";
     var t0 = Date.now(), err = null;
     window.MAE.log(field.name + ": executando " + items.length + " comandos em " + ne + "…", "in");
