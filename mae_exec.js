@@ -19,8 +19,8 @@
     { id: "pwScript", after: "pwCopy",     name: "Potência · script" },
     { id: "pwRb",     after: "pwCopyRb",   name: "Potência · rollback", label: "▶ Executar rollback" },
     { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true },
-    { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script", guard: true },
-    { id: "r4TxOut",  after: "r4TxCopy",   name: "RS_4G · TX VIVO", guard: "tx", stopOnFail: true }
+    { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script", guard: true, askOnFail: true, site: rs4Site },
+    { id: "r4TxOut",  after: "r4TxCopy",   name: "RS_4G · TX VIVO", guard: "tx", askOnFail: true, site: rs4Site }
   ];
   var BATCH = 5;
   var MML_RE = /^(?:[A-Z][A-Z0-9]*\s+[A-Z0-9_]+|PING)\s*:.*;$/i;       // PING não tem objeto ("PING:SN=...;")
@@ -75,6 +75,8 @@
     });
     return { cmds: cmds, skipped: skipped };
   }
+  // RS_4G: roda no site escolhido na própria aba (não no da Entrada)
+  function rs4Site() { try { return (window.RS4G && window.RS4G._t.state.site) || ""; } catch (e) { return ""; } }
   function siteName() { return (($("neLbl") && $("neLbl").textContent) || "").trim(); }
   // nome do NE no cabeçalho "+++    NOME   data" das respostas da Rodada 1 (ignora "NMS SERVER")
   function siteFromR1() {
@@ -97,7 +99,7 @@
   // ---------- tela ----------
   var ov = null, items = [], abort = false, running = false, field = null, ne = "", stopMsg = "", lastAid = "", labelOk = null;
   function openScreen(f, cmds, skipped) {
-    field = f; ne = siteName(); abort = false;
+    field = f; ne = (f.site && f.site()) || siteName(); abort = false;
     items = cmds.map(function (c, i) { return { idx: i, line: c.line, cmd: c.cmd, st: "pd", msg: "", msg1: "", resp: "" }; });
     if (ov) ov.remove();
     ov = document.createElement("div"); ov.id = "mxOv";
@@ -200,7 +202,7 @@
     if (!labelOk) { it.st = "pd"; it.msg = "pulado (USER LABEL não confirmado)"; setRow(it); return true; }
     var x = await runOne(it.cmd);
     it.resp += x.resp || ""; it.st = x.ok ? "ok" : "er"; it.msg = x.ok ? "" : retMsg(x.resp); setRow(it);
-    if (!x.ok && field.stopOnFail) { stopMsg = "Parado: " + it.cmd + " falhou (" + it.msg + ")."; return false; }
+    if (!x.ok && field.askOnFail && !askGo(it)) return false;
     return true;
   }
   function sleep(ms) {
@@ -282,6 +284,12 @@
     }
   }
 
+  // RS_4G: comando com erro → pergunta se continua
+  function askGo(it) {
+    var go = confirm("O comando falhou em " + ne + ":\n\n  " + it.cmd + "\n  → " + (it.msg || "erro") + "\n\nOK = continuar com os próximos · Cancelar = parar aqui");
+    if (!go) stopMsg = "Parado por você após o erro em: " + it.cmd + " → " + (it.msg || "erro") + ".";
+    return go;
+  }
   async function runList(list, phase) {
     var i = 0;
     while (i < list.length) {
@@ -295,13 +303,13 @@
         continue;
       }
       var part = [];
-      var bs = field.stopOnFail ? 1 : BATCH;                       // TX: um por vez, para parar no 1º erro
-      while (i < list.length && part.length < bs && !(phase === 1 && isGuard(list[i]))) part.push(list[i++]);
+      var ask = !!(field.askOnFail && phase === 1);
+      while (i < list.length && part.length < BATCH && !(phase === 1 && isGuard(list[i]))) part.push(list[i++]);
       part.forEach(function (it) { it.st = "run"; setRow(it); var m = /^RST\s+APP\s*:.*AID\s*=\s*(\d+)/i.exec(it.cmd); if (m) lastAid = m[1]; });
       var tr = $("mxr" + part[0].idx); if (tr && !$("mxOnlyFail").checked) tr.scrollIntoView({ block: "nearest" });
       var r;
       try {
-        r = await window.MAE.api("/run", { ne: ne, cmds: part.map(function (it) { return it.cmd; }), stopOnError: false });
+        r = await window.MAE.api("/run", { ne: ne, cmds: part.map(function (it) { return it.cmd; }), stopOnError: ask });
       } catch (e) {
         part.forEach(function (it) { it.st = "pd"; setRow(it); });
         throw e;
@@ -309,6 +317,10 @@
       if (r[0] && /^REG NE/.test(r[0].cmd)) {
         if (!r[0].ok) { part.forEach(function (it) { it.st = "pd"; setRow(it); }); throw new Error("REG NE falhou para " + ne + ": " + retMsg(r[0].resp)); }
         r = r.slice(1);
+      }
+      if (ask && r.length && r.length < part.length) {                         // o helper parou no erro: o resto volta para a fila
+        var back = part.length - r.length; part.slice(r.length).forEach(function (it) { it.st = "pd"; setRow(it); });
+        part = part.slice(0, r.length); i -= back;
       }
       part.forEach(function (it, k) {
         var x = r[k] || { ok: false, resp: "sem resposta do helper" };
@@ -318,8 +330,8 @@
         setRow(it);
       });
       stats(phase, i, list.length);
-      var bad = field.stopOnFail && phase === 1 ? part.filter(function (it) { return it.st === "er" && !/^#/.test(it.cmd); })[0] : null;
-      if (bad) { stopMsg = "Parado no 1º erro: " + bad.cmd + " → " + bad.msg + ". Corrija e execute de novo (o que já foi criado aparece como “já existe” depois de Ler TX do MAE)."; abort = true; return false; }
+      var bad = ask ? part.filter(function (it) { return it.st === "er" && !/^#/.test(it.cmd); })[0] : null;
+      if (bad && !askGo(bad)) { abort = true; return false; }
     }
     return true;
   }

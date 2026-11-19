@@ -472,6 +472,18 @@
     if (p.engTxt) { var E2 = engCands([{ name: "colado", rows: textRows(p.engTxt) }], S.site); E.c = E2.c.concat(E.c); E.notes = E.notes.concat(E2.notes); }
     T.eng = E;
     if (ENG && !E.siteSeen && E.sites.length) T.block.push("A ENG-SI carregada (" + ENG.file + ") é do site " + E.sites.map(canonSite).join(", ") + " e o site escolhido é " + (S.site || "nenhum") + " — escolha o site certo em (a) ou use o botão em (b).");
+    // TX já feita: o próprio site informa os valores VIVO (USER LABEL com VIVO no DEVIP + VLANMAP do gateway)
+    T.siteVivo = false;
+    T.dev.forEach(function (x) {
+      if (!/vivo/i.test(x.label)) return;
+      var pt = ptCode(x.pt), b = maskBits(x.mask);
+      if (pt === "ETH") {
+        T.siteVivo = true;
+        E.c.push({ f: "infra", op: "VIVO", v: x.ip, where: "site (LST DEVIP)", rk: "site", lab: x.label, site: true });
+        if (b > 0) E.c.push({ f: "mask", op: "VIVO", v: x.mask, where: "site (LST DEVIP)", rk: "site", lab: x.label, site: true });
+        T.vm.forEach(function (v) { if (b > 0 && b < 32 && inNet(v.nh, x.ip, b) && v.nh !== x.ip) { E.c.push({ f: "gw", op: "VIVO", v: v.nh, where: "site (LST VLANMAP)", rk: "site", lab: "next hop na sub-rede " + x.label, site: true }); E.c.push({ f: "vlan", op: "VIVO", v: v.vlan, where: "site (LST VLANMAP)", rk: "site", lab: "VLAN do next hop " + v.nh, site: true }); } });
+      } else if (pt === "LOOPINT") { T.siteVivo = true; E.c.push({ f: "s1x2", op: "VIVO", v: x.ip, where: "site (LST DEVIP)", rk: "site", lab: x.label, site: true }); }
+    });
     var vlanUsed = {}; T.vm.forEach(function (x) { vlanUsed[x.vlan] = x; });
     var nhUsed = {}; T.vm.forEach(function (x) { nhUsed[x.nh] = x; });
     function onSite(f, v) {
@@ -483,7 +495,9 @@
     var pk = {};
     function pick(f, rk) {
       var c = E.c.filter(function (x) { return x.f === f && x.op !== "TIM"; });
-      var tiers = [c.filter(function (x) { return x.op === "VIVO" && !onSite(f, x.v); }), c.filter(function (x) { return x.op === "" && !onSite(f, x.v); }), c.filter(function (x) { return x.op === "VIVO"; })];
+      // 1) VIVO novo · 2) sem operadora novo · 3) ENG-SI já aplicada no site · 4) do próprio site (USER LABEL VIVO)
+      var tiers = [c.filter(function (x) { return x.op === "VIVO" && !x.site && !onSite(f, x.v); }), c.filter(function (x) { return x.op === "" && !onSite(f, x.v); }),
+        c.filter(function (x) { return !x.site; }), c.filter(function (x) { return x.site; })];
       for (var i = 0; i < tiers.length; i++) if (tiers[i].length) { var s = tiers[i].filter(function (x) { return rk && x.rk === rk; })[0]; return s || tiers[i][0]; }
       return null;
     }
@@ -536,7 +550,10 @@
     T.skip = {};
     if (ipOk(V.infra) && mb >= 8) {
       var ex = devBy[V.infra];
-      if (ex) { if (ptCode(ex.pt) === "ETH") T.skip.infra = "já existe no site (SN " + ex.sn + " ETH " + ex.pn + (ex.label ? " · " + ex.label : "") + ")"; else T.block.push("IP INFRA " + V.infra + " já está no site numa porta " + ex.pt + "."); }
+      if (ex) {
+        if (ptCode(ex.pt) === "ETH") { T.skip.infra = "já existe no site (SN " + ex.sn + " ETH " + ex.pn + (ex.label ? " · " + ex.label : "") + ")"; if (maskBits(ex.mask) !== mb) T.block.push("IP INFRA " + V.infra + " já está no site com máscara " + ex.mask + " e a ENG-SI pede " + V.mask + " — confira."); }
+        else T.block.push("IP INFRA " + V.infra + " já está no site numa porta " + ex.pt + ".");
+      }
       else T.dev.forEach(function (x) { var b = maskBits(x.mask); if ((x.vrf || "0") === "0" && b >= 0 && overlap(x.ip, b, V.infra, mb)) T.block.push("A sub-rede " + n2ip(netOf(V.infra, mb)) + "/" + mb + " (IP INFRA VIVO) sobrepõe " + x.ip + "/" + b + " (" + (x.label || x.pt) + ") que já está no site."); });
       if (mb < 31 && (ip2n(V.infra) === netOf(V.infra, mb) || ip2n(V.infra) === netOf(V.infra, mb) + Math.pow(2, 32 - mb) - 1)) T.block.push("IP INFRA " + V.infra + " é o endereço de rede/broadcast da sub-rede /" + mb + ".");
       if (ipOk(V.gw)) {
@@ -567,7 +584,8 @@
       if (seenR[dst]) { seenR[dst].names.push(x[0]); return; }
       var o = { dst: dst, mask: "255.255.0.0", names: [x[0]], desc: x[0] + "_VIVO" };
       var same = T.rts.filter(function (r) { return r.dst === dst && maskBits(r.mask) === 16; });
-      if (same.some(function (r) { return r.nh === V.gw; })) o.skip = "já existe (RTIDX " + same.filter(function (r) { return r.nh === V.gw; })[0].idx + ")";
+      var cov = T.rts.filter(function (r) { var b = maskBits(r.mask); return r.nh === V.gw && b > 0 && inNet(x[1], r.dst, b); })[0];
+      if (cov) o.skip = "já roteado via " + V.gw + " (RTIDX " + cov.idx + " · " + cov.dst + "/" + maskBits(cov.mask) + (cov.desc ? " · " + cov.desc : "") + ")";
       else if (same.length) o.conflict = same[0];
       else {
         var wide = T.rts.filter(function (r) { var b = maskBits(r.mask); return b > 0 && b < 16 && inNet(dst, r.dst, b) && r.nh !== V.gw; })[0];   // rota default (0.0.0.0/0) é normal
@@ -626,6 +644,12 @@
     Object.keys(pasted).forEach(function (ip) { if (!res[ip]) res[ip] = pasted[ip]; });
     T.res = res;
     T.ok = !T.block.length;
+    T.chk = [
+      ["VLANMAP " + (V.vlan || "?"), !!T.skip.vlan], ["IP INFRA " + (V.infra || "?"), !!T.skip.infra], ["S1/X2 " + (V.s1x2 || "?"), !!T.skip.s1x2],
+      ["SCTPHOST S1 " + P.hS1, !!T.exS1], ["SCTPHOST X2 " + P.hX2, !!T.exX2], ["UPHOST " + P.up, !!T.exUp],
+      ["Rotas " + T.routes.filter(function (o) { return o.skip; }).length + "/" + T.routes.length, T.routes.length > 0 && T.routes.every(function (o) { return o.skip; })]
+    ];
+    T.done = T.ok && T.hasRead && T.chk.every(function (x) { return x[1]; });
     return T;
   }
 
@@ -636,7 +660,8 @@
     add(hr, "// TX VIVO · " + T.site + " · gerado em " + now() + " · TELEBIT RAN", "// Core VIVO: " + (T.gi ? gwLabel(T.gi.i) + " (" + T.gi.why + ")" : "—"),
       "// Placa SN=" + P.sn + " · ETHport " + P.pn + (T.ref ? " (do LST DEVIP: " + T.ref.ip + (T.ref.label ? " · " + T.ref.label : "") + ")" : ""), hr, "");
     var labs = T.lab.filter(function (x) { return x.on && x.txt && x.ok; });
-    if (T.ok || labs.length) add("// Ponto de rollback antes de mexer no TX (se falhar, o Executar tenta outro NAME; se falhar de novo, pergunta)", 'CFM CB:NAME="TX_RS",AUTORBKSW=DISABLE;', "");
+    var cfmAt = L.length;
+    if (T.done) add("// ✅ TX VIVO JÁ CONFIGURADA conforme a ENG-SI e o roteiro — nada a criar; só os testes de PING", "");
     if (labs.length) {
       add("// USER LABEL dos IPs sem identificação (confirmado na tela — o Executar pede confirmação de novo)");
       labs.forEach(function (x) { var d = x.d; add("MOD DEVIP:" + loc(d) + "SN=" + d.sn + ",SBT=" + sbtCode(d.sbt) + ",PT=" + ptCode(d.pt) + ",PN=" + d.pn + ',IP="' + d.ip + '",USERLABEL="' + x.txt + '";'); });
@@ -644,6 +669,7 @@
     }
     if (!T.ok) {
       add("// ⚠ CONFIGURAÇÃO DE TX NÃO GERADA — resolva antes:"); T.block.forEach(function (x) { add("//   - " + x); });
+      if (L.some(function (l) { return /^(ADD|MOD)\s/.test(l); })) L.splice(cfmAt, 0, 'CFM CB:NAME="TX_RS",AUTORBKSW=DISABLE;', "");
       return L.join("\n");
     }
     add("// 1) VLAN do gateway VIVO", "LST VLANMAP:;");
@@ -669,6 +695,8 @@
     add("", "// 6) Testes de PING a partir do S1/X2 VIVO — um por vez (o próximo só sai quando o anterior termina)");
     T.pings.forEach(function (x) { add("// " + x.nm, "PING:" + loc(dv) + "SN=" + P.sn + ',SRCIP="' + V.s1x2 + '",DSTIP="' + x.ip + '",CONTPING=DISABLE,APPTIF=NO;'); });
     add("", "// Depois: “Ler TX do MAE” de novo para conferir · seguir para o RAN Sharing (seções 1 a 7)");
+    if (L.some(function (l) { return /^(ADD|MOD)\s/.test(l); }))
+      L.splice(cfmAt, 0, "// Ponto de rollback antes de mexer no TX (se falhar, o Executar tenta outro NAME; se falhar de novo, pergunta)", 'CFM CB:NAME="TX_RS",AUTORBKSW=DISABLE;', "");
     return L.join("\n");
   }
 
@@ -772,7 +800,11 @@
         }
         if (pr.pci && int(pr.pci) && c.pci && int(pr.pci) !== int(c.pci)) a.pciDiff = int(pr.pci);
         a.ord = ordOf(pr.setor, pr.cell);
-      } else a.ord = ordOf("", c.name);
+      } else {
+        a.ord = ordOf("", c.name);
+        var nmU = ((u.nm || {})[c.id] || "").trim();                 // fora da planilha: nome destino digitado
+        if (nmU && nmU !== c.name) { a.newName = nmU; a.act.push("name"); }
+      }
       a.skip = !!u.skip[c.id];
       // ações desmarcadas uma a uma na tabela (freq / banda / nome): ficam visíveis mas saem do script
       var off = u.off || (u.off = {});
@@ -864,17 +896,45 @@
     d.sctpX2 = h2e[x2r.cp] || hosts.filter(function (h) { return h !== d.sctpS1; })[0] || d.sctpS1;
     d.upS1 = u2e[s1r.up] || uph[0] || "30";
     d.upX2 = u2e[x2r.up] || d.upS1;
-    d.peer1 = String(nextFree(1500, peerU)); peerU[d.peer1] = 1; d.peer2 = String(nextFree(2300, peerU));
     d.s1Id = String(nextFree(3, s1U)); d.x2Id = String(nextFree(3, x2U));
     d.wait = "20";
     var mm = mmeStore()[M.uf || "_"] || {}, tx = M.tx;
     d.mme1 = mm.ip1 || MME_DEF.ip1; d.mme2 = mm.ip2 || MME_DEF.ip2; M.mmeDefault = !(mm.ip1 || mm.ip2); M.mmeFrom = M.mmeDefault ? "" : "salvos para a UF " + (M.uf || "?");
     if (tx.mme.length >= 2) { d.mme1 = tx.mme[0]; d.mme2 = tx.mme[1]; M.mmeDefault = false; M.mmeFrom = "etapa 0 · " + gwLabel(tx.gi.i); }
-    // SCTPHOST/UPHOST da VIVO criados na etapa 0 (TX) — senão, os mesmos da TIM (roteiro original)
-    M.hostFromTx = !!(tx.ok || (tx.exS1 && tx.exUp));
-    if (M.hostFromTx) { d.sctpS1 = tx.p.hS1; d.sctpX2 = tx.p.hX2; d.upS1 = tx.p.up; d.upX2 = tx.p.up; }
+    // SCTPHOST/UPHOST: sempre os da VIVO da etapa 0 (padrão 30 S1 · 31 X2 · UP 30; pula se ocupado por outro)
+    M.hostFromTx = true;
+    d.sctpS1 = tx.p.hS1; d.sctpX2 = tx.p.hX2; d.upS1 = tx.p.up; d.upX2 = tx.p.up;
+    // EPGROUP VIVO já existente (USERLABEL S1_VIVO / X2_VIVO) → reaproveita o ID
+    var epgs = rowsOf(R, "LST EPGROUP").map(function (r) { return { id: g(r, "EPGroup ID"), label: g(r, "User Label") }; }).filter(function (x) { return x.id !== ""; });
+    var eS1 = epgs.filter(function (x) { return /s1.?vivo/i.test(x.label); })[0], eX2 = epgs.filter(function (x) { return /x2.?vivo/i.test(x.label); })[0];
+    if (eS1) d.epgS1 = eS1.id; if (eX2) d.epgX2 = eX2.id;
+    // SCTPPEER: mantém 1500 / 2300; se já existir peer com o mesmo IP do MME e porta 36412, usa ele (não cria outro número)
+    var peers = rowsOf(R, "LST SCTPPEER").map(function (r) {
+      var port = ""; Object.keys(r).forEach(function (k) { if (!port && /port/i.test(k) && /^\d{3,5}$/.test(sv(r[k]))) port = sv(r[k]); });
+      return { id: g(r, "SCTP Peer ID"), ips: ipsIn(r), port: port, label: g(r, "User Label") };
+    }).filter(function (x) { return x.id !== ""; });
+    var mF1 = (p.mme1 && String(p.mme1).trim()) || d.mme1, mF2 = (p.mme2 && String(p.mme2).trim()) || d.mme2;
+    function peerFor(ip, pref) {
+      var m = peers.filter(function (x) { return x.ips.indexOf(ip) >= 0 && (!x.port || x.port === "36412"); });
+      return m.filter(function (x) { return x.id === pref; })[0] || m[0] || null;
+    }
+    var pe1 = peerFor(mF1, "1500"), pe2 = peerFor(mF2, "2300");
+    d.peer1 = pe1 ? pe1.id : String(nextFree(1500, peerU)); peerU[d.peer1] = 1;
+    d.peer2 = pe2 && pe2 !== pe1 ? pe2.id : String(nextFree(2300, peerU));
     M.def = d; M.p = {};
     Object.keys(d).forEach(function (k) { M.p[k] = (p[k] != null && String(p[k]).trim() !== "") ? String(p[k]).trim() : d[k]; });
+    var epgEx = {}; epgs.forEach(function (x) { epgEx[x.id] = x; });
+    var bind = function (k, f) { var o = {}; rowsOf(R, k).forEach(function (r) { o[g(r, "EPGroup ID") + "|" + g(r, f)] = 1; }); return o; };
+    var hB = bind("LST SCTPHOST2EPGRP", "SCTP Host ID"), uB = {}, pB = bind("LST SCTPPEER2EPGRP", "SCTP Peer ID");
+    rowsOf(R, "LST UPHOST2EPGRP").forEach(function (r) { uB[g(r, "EPGroup ID") + "|" + g(r, "User Plane Host ID", "UP Host ID")] = 1; });
+    var peerById = {}; peers.forEach(function (x) { peerById[x.id] = x; });
+    M.ex = {
+      epgS1: epgEx[M.p.epgS1], epgX2: epgEx[M.p.epgX2],
+      peer1: peerById[M.p.peer1] && peerById[M.p.peer1].ips.indexOf(M.p.mme1) >= 0, peer2: peerById[M.p.peer2] && peerById[M.p.peer2].ips.indexOf(M.p.mme2) >= 0,
+      hB: hB, uB: uB, pB: pB
+    };
+    ["peer1", "peer2"].forEach(function (k, i) { var x = peerById[M.p[k]]; if (x && !M.ex[k]) M.block.push("SCTPPEER " + M.p[k] + " já existe com outro IP (" + x.ips.join(",") + (x.label ? " · " + x.label : "") + ") — troque o ID na seção 6."); });
+    ["epgS1", "epgX2"].forEach(function (k) { var x = epgEx[M.p[k]]; if (x && !/vivo/i.test(x.label)) M.block.push("EPGROUP " + M.p[k] + " já existe (" + (x.label || "sem label") + ") — troque o ID na seção 6."); });
     if (!R["LST S1"]) M.warn.push("LST S1 não lido — o MOD S1 (TIM) e o SCTPHOST/UPHOST do S1 VIVO foram assumidos. Rode a leitura RS.");
 
     // ---------- blocos ----------
@@ -930,13 +990,18 @@
         add("ADD CNOPERATORTA:TRACKINGAREAID=" + M.iotVivo + ",CNOPERATORID=3,TAC=" + M.iotTac + ",NBIOTTAFLAG=BOOLEAN_TRUE;");
       }
       add("", "// Conectividade com o MME VIVO" + (M.mmeDefault ? " (IPs do exemplo do roteiro — CONFIRME para a regional)" : ""));
-      add('ADD EPGROUP:EPGROUPID=' + p.epgS1 + ',USERLABEL="S1_VIVO",IPPMSWITCH=DISABLE,APPTYPE=NULL;');
-      add('ADD EPGROUP:EPGROUPID=' + p.epgX2 + ',USERLABEL="x2_VIVO",IPPMSWITCH=DISABLE,APPTYPE=NULL;');
-      add("ADD SCTPHOST2EPGRP:EPGROUPID=" + p.epgS1 + ",SCTPHOSTID=" + p.sctpS1 + ";", "ADD SCTPHOST2EPGRP:EPGROUPID=" + p.epgX2 + ",SCTPHOSTID=" + p.sctpX2 + ";");
-      add("ADD UPHOST2EPGRP:EPGROUPID=" + p.epgS1 + ",UPHOSTID=" + p.upS1 + ";", "ADD UPHOST2EPGRP:EPGROUPID=" + p.epgX2 + ",UPHOSTID=" + p.upX2 + ";");
+      var X = M.ex || { hB: {}, uB: {}, pB: {} }, ja = function (t) { return "// " + t + " — já existe no site"; };
+      add(X.epgS1 ? ja("EPGROUP " + p.epgS1 + " (" + X.epgS1.label + ")") : 'ADD EPGROUP:EPGROUPID=' + p.epgS1 + ',USERLABEL="S1_VIVO",IPPMSWITCH=DISABLE,APPTYPE=NULL;');
+      add(X.epgX2 ? ja("EPGROUP " + p.epgX2 + " (" + X.epgX2.label + ")") : 'ADD EPGROUP:EPGROUPID=' + p.epgX2 + ',USERLABEL="x2_VIVO",IPPMSWITCH=DISABLE,APPTYPE=NULL;');
+      add(X.hB[p.epgS1 + "|" + p.sctpS1] ? ja("SCTPHOST2EPGRP " + p.epgS1 + "/" + p.sctpS1) : "ADD SCTPHOST2EPGRP:EPGROUPID=" + p.epgS1 + ",SCTPHOSTID=" + p.sctpS1 + ";");
+      add(X.hB[p.epgX2 + "|" + p.sctpX2] ? ja("SCTPHOST2EPGRP " + p.epgX2 + "/" + p.sctpX2) : "ADD SCTPHOST2EPGRP:EPGROUPID=" + p.epgX2 + ",SCTPHOSTID=" + p.sctpX2 + ";");
+      add(X.uB[p.epgS1 + "|" + p.upS1] ? ja("UPHOST2EPGRP " + p.epgS1 + "/" + p.upS1) : "ADD UPHOST2EPGRP:EPGROUPID=" + p.epgS1 + ",UPHOSTID=" + p.upS1 + ";");
+      add(X.uB[p.epgX2 + "|" + p.upX2] ? ja("UPHOST2EPGRP " + p.epgX2 + "/" + p.upX2) : "ADD UPHOST2EPGRP:EPGROUPID=" + p.epgX2 + ",UPHOSTID=" + p.upX2 + ";");
       var peer = function (id, ip, lb) { return "ADD SCTPPEER:SCTPPEERID=" + id + ',IPVERSION=IPv4,SIGIP1V4="' + ip + '",SIGIP1SECSWITCH=DISABLE,SIGIP2SECSWITCH=DISABLE,PN=36412,SIMPLEMODESWITCH=SIMPLE_MODE_OFF,USERLABEL="' + lb + '";'; };
-      add(peer(p.peer1, p.mme1, "MME_1_VIVO"), peer(p.peer2, p.mme2, "MME_2_VIVO"));
-      add("ADD SCTPPEER2EPGRP:EPGROUPID=" + p.epgS1 + ",SCTPPEERID=" + p.peer1 + ";", "ADD SCTPPEER2EPGRP:EPGROUPID=" + p.epgS1 + ",SCTPPEERID=" + p.peer2 + ";");
+      add(X.peer1 ? ja("SCTPPEER " + p.peer1 + " (" + p.mme1 + ", porta 36412)") : peer(p.peer1, p.mme1, "MME_1_VIVO"));
+      add(X.peer2 ? ja("SCTPPEER " + p.peer2 + " (" + p.mme2 + ", porta 36412)") : peer(p.peer2, p.mme2, "MME_2_VIVO"));
+      add(X.pB[p.epgS1 + "|" + p.peer1] ? ja("SCTPPEER2EPGRP " + p.epgS1 + "/" + p.peer1) : "ADD SCTPPEER2EPGRP:EPGROUPID=" + p.epgS1 + ",SCTPPEERID=" + p.peer1 + ";");
+      add(X.pB[p.epgS1 + "|" + p.peer2] ? ja("SCTPPEER2EPGRP " + p.epgS1 + "/" + p.peer2) : "ADD SCTPPEER2EPGRP:EPGROUPID=" + p.epgS1 + ",SCTPPEERID=" + p.peer2 + ";");
       add("");
       (M.s1Tim.length ? M.s1Tim : [{ id: "0" }]).forEach(function (s) { add("MOD S1:S1ID=" + s.id + ',CNOPERATORID=2,USERLABEL="S1_TIM";'); });
       add("ADD S1:S1ID=" + p.s1Id + ",CNOPERATORID=3,EPGROUPCFGFLAG=CP_UP_CFG,CPEPGROUPID=" + p.epgS1 + ",UPEPGROUPID=" + p.epgS1 + ',USERLABEL="S1_VIVO";');
@@ -1031,6 +1096,7 @@
     "#pane-rs4g .r4-act{border:1px solid #b8c2f5;background:#e8ecff;color:#4f63d8;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;cursor:pointer;margin:1px 2px}",
     "#pane-rs4g .r4-act.off{background:#f2f4f7;color:#98a2b3;border-color:#d0d5dd;text-decoration:line-through}",
     "#pane-rs4g .r4-offv{color:#98a2b3}",
+    "#pane-rs4g .r4-nmin{font:12.5px Consolas,monospace;padding:3px 6px;border:1px solid #e3c88a;background:#fffbea;border-radius:6px;width:150px}#pane-rs4g .r4-nmin.chg{border-color:#4f63d8;background:#eef0ff}",
     "#pane-rs4g .chip.er{background:#fdecec;color:#c7000b}#pane-rs4g .chip.in{background:#e8ecff;color:#4f63d8}",
     "#pane-rs4g .r4-grid{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,2fr);gap:12px}",
     "#pane-rs4g .r4-two{display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,2fr);gap:12px}",
@@ -1055,6 +1121,7 @@
     "#pane-rs4g .r4-msg{border-radius:8px;padding:8px 12px;margin:6px 0;font-size:13px}",
     "#pane-rs4g .r4-msg.wa{background:var(--c-warnbg,#fff3dc);color:var(--c-warn,#8a5a00)}#pane-rs4g .r4-msg.er{background:#fdecec;color:#9d0009}#pane-rs4g .r4-msg.ok{background:var(--c-okbg,#e3f6ea);color:var(--c-ok,#16613a)}",
     "#pane-rs4g .r4-msg ul{margin:4px 0 0 18px;padding:0}",
+    "#pane-rs4g .r4-msg.in{background:#f1f3ff;color:#2c3a9e}#pane-rs4g .r4-msg .chip{margin:2px 2px 0 0}",
     "#pane-rs4g .r4-blk{display:flex;gap:14px;flex-wrap:wrap;margin:4px 0 8px}#pane-rs4g .r4-blk label{display:flex;gap:6px;align-items:center;font-size:13px;font-weight:600}",
     "#pane-rs4g .kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:6px 14px;margin:6px 0}",
     "#pane-rs4g .kv div{font-size:12.5px}#pane-rs4g .kv b{display:block;font-size:11px;color:#667085;font-weight:600;text-transform:uppercase;letter-spacing:.02em}",
@@ -1203,7 +1270,7 @@
     ch.push(chip(S.readText ? "ok" : "wa", S.readText ? "leitura RS " + (S.readAt || "") : "sem leitura RS"));
     if (M.rsDone) ch.push(chip("in", "RS já feito"));
     var txr = M.tx.pings.map(function (x) { return M.tx.res[x.ip]; }).filter(Boolean);
-    ch.push(!M.tx.hasRead ? chip("wa", "TX: sem leitura") : !M.tx.ok ? chip("er", "TX: pendências") : txr.length < M.tx.pings.length ? chip("in", "TX: script pronto") :
+    ch.push(!M.tx.hasRead ? chip("wa", "TX: sem leitura") : !M.tx.ok ? chip("er", "TX: pendências") : M.tx.done && txr.length < M.tx.pings.length ? chip("ok", "TX: já configurada") : txr.length < M.tx.pings.length ? chip("in", "TX: script pronto") :
       chip(txr.every(function (r) { return r.ok; }) ? "ok" : "er", "PING " + txr.filter(function (r) { return r.ok; }).length + "/" + M.tx.pings.length + " OK"));
     $("r4Chips").innerHTML = ch.join("");
     $("bdg-rs4g") && ($("bdg-rs4g").textContent = M.hasPlan ? "✓" : "");
@@ -1268,12 +1335,14 @@
       var opTxt = ta.length ? ta.map(function (t) { return t + (a.ops[t] ? "✓" : ""); }).join(" / ") : "—";
       var has = a.act.length > 0;
       h += "<tr" + (a.skip ? ' class="off"' : "") + "><td>" + (has ? '<input type="checkbox" data-skip="' + esc(c.id) + '"' + (a.skip ? "" : " checked") + ' title="incluir as ações desta célula">' : "") + "</td>" +
-        '<td class="mono">' + esc(c.id) + "</td><td>" + esc(c.name) + (c.nb ? " " + chip("", "NB-IoT") : "") + "</td><td>" + (a.pr ? arrowOff(c.name, a.newName, a.plan.name, a.off.name) : '<span class="same">—</span>') + "</td>" +
+        '<td class="mono">' + esc(c.id) + "</td><td>" + esc(c.name) + (c.nb ? " " + chip("", "NB-IoT") : "") + "</td><td>" + (a.pr ? arrowOff(c.name, a.newName, a.plan.name, a.off.name) :
+          '<input class="r4-nmin' + (a.plan.name ? " chg" : "") + '" data-nm="' + esc(c.id) + '" value="' + esc((U().nm || {})[c.id] || "") + '" placeholder="nome destino (opcional)" title="célula fora da planilha: digite o nome novo para gerar o MOD CELL">') + "</td>" +
         '<td class="mono">' + esc(c.band || "—") + '</td><td class="mono">' + (c.nb ? "—" : arrowOff(c.dl, a.newDl, a.plan.freq, a.off.freq)) + '</td><td class="mono">' + (c.nb ? "—" : arrowOff(bwMhz(c.dlbw) || c.dlbw, a.newBw, a.plan.bw, a.off.bw)) + "</td>" +
         '<td class="mono">' + esc(c.pci || "—") + '</td><td class="mono">' + esc(opTxt) + "</td><td>" + (acts.join(" ") || '<span class="same">ok</span>') + "</td></tr>";
     });
     h += "</tbody></table></div>";
     $("r4Cells").innerHTML = h;
+    $("r4Cells").querySelectorAll("[data-nm]").forEach(function (el) { el.addEventListener("change", function () { var u = U(); u.nm = u.nm || {}; var v = this.value.replace(/["';]/g, "").trim().slice(0, 99); if (v) u.nm[this.getAttribute("data-nm")] = v; else delete u.nm[this.getAttribute("data-nm")]; render(); }); });
     $("r4Cells").querySelectorAll("[data-act]").forEach(function (el) { el.addEventListener("click", function () { var u = U(), k = this.getAttribute("data-act"); u.off = u.off || {}; if (u.off[k]) delete u.off[k]; else u.off[k] = true; render(); }); });
     $("r4Cells").querySelectorAll("[data-skip]").forEach(function (el) { el.addEventListener("change", function () { U().skip[this.getAttribute("data-skip")] = !this.checked; render(); }); });
     renderNew();
@@ -1371,7 +1440,9 @@
       return "<label>" + esc(x[1]) + '<input data-txp="' + k + '" value="' + esc(T.p[k]) + '"' + (chg ? ' class="chg" title="editado (calculado: ' + esc(T.def[k]) + ')"' : "") + "></label>";
     }).join("") + "</div>";
     // pendências
-    $("r4TxMsg").innerHTML = (T.block.length ? '<div class="r4-msg er"><b>Antes de gerar a configuração:</b><ul>' + T.block.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div>" : T.hasRead ? '<div class="r4-msg ok">Conferências OK — o script não repete nada que já existe no site.</div>' : "") +
+    $("r4TxMsg").innerHTML = (T.hasRead ? '<div class="r4-msg ' + (T.done ? "ok" : "in") + '" style="margin-top:8px">' + (T.done ? '<b class="big">✅ TX VIVO já configurada</b> — conferido com a ENG-SI/roteiro; o script fica só com os PINGs.<br>' : "<b>Conferência do site:</b> ") +
+      T.chk.map(function (x) { return chip(x[1] ? "ok" : "", (x[1] ? "✓ " : "a criar · ") + x[0]); }).join(" ") + "</div>" : "") +
+      (T.block.length ? '<div class="r4-msg er"><b>Antes de gerar a configuração:</b><ul>' + T.block.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div>" : T.hasRead && !T.done ? '<div class="r4-msg ok">Conferências OK — o script não repete nada que já existe no site.</div>' : "") +
       (T.warn.length ? '<div class="r4-msg wa"><b>Atenção</b><ul>' + T.warn.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div>" : "");
     // PINGs
     $("r4TxPing").innerHTML = T.pings.length ? '<h3 style="font-size:14px;margin:0 0 6px">Testes de PING (origem ' + esc(V.s1x2 || "S1/X2 VIVO") + ")</h3>" +
@@ -1487,8 +1558,8 @@
         var k = x[0], chg = u.p[k] != null && String(u.p[k]).trim() !== "" && String(u.p[k]).trim() !== M.def[k];
         return "<label>" + esc(x[1]) + '<input data-par="' + k + '" value="' + esc(M.p[k]) + '"' + (chg ? ' class="chg" title="valor editado (calculado: ' + esc(M.def[k]) + ')"' : "") + "></label>";
       }).join("") + "</div>" +
-      '<p class="muted" style="font-size:12px;margin:6px 0 0">' + (M.hostFromTx ? "SCTPHOST/UPHOST: os da VIVO da etapa 0 (S1 " + esc(M.tx.p.hS1) + " · X2 " + esc(M.tx.p.hX2) + " · UP " + esc(M.tx.p.up) + ")." :
-        "SCTPHOST/UPHOST: sem TX VIVO na etapa 0 — usando os mesmos do S1/X2 da TIM (LST SCTPHOST2EPGRP / UPHOST2EPGRP).") + " IDs novos só pulam se já estiverem em uso no site.</p>";
+      '<p class="muted" style="font-size:12px;margin:6px 0 0">SCTPHOST/UPHOST: os da VIVO da etapa 0 (S1 ' + esc(M.tx.p.hS1) + " · X2 " + esc(M.tx.p.hX2) + " · UP " + esc(M.tx.p.up) + "). SCTPPEER 1500/2300: se já existirem com o IP do MME VIVO, são reaproveitados" +
+        (M.ex && (M.ex.peer1 || M.ex.peer2 || M.ex.epgS1) ? " " + chip("ok", "já existe: " + [M.ex.epgS1 && "EPGROUP " + M.p.epgS1, M.ex.epgX2 && "EPGROUP " + M.p.epgX2, M.ex.peer1 && "PEER " + M.p.peer1, M.ex.peer2 && "PEER " + M.p.peer2].filter(Boolean).join(" · ")) : "") + ". IDs novos só pulam se já estiverem em uso.</p>";
     $("r4Par").querySelectorAll("[data-par]").forEach(function (el) {
       el.addEventListener("change", function () {
         var k = this.getAttribute("data-par"), v = this.value.trim();
