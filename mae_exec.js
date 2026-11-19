@@ -21,7 +21,7 @@
     { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true },
     { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script", guard: true, askOnFail: true, site: rs4Site },
     { id: "r4TxOut",  after: "r4TxCopy",   name: "RS_4G · TX VIVO", guard: "tx", askOnFail: true, site: rs4Site },
-    { id: "r4TxPingOut", after: "r4TxPingAnchor", name: "RS_4G · só PING VIVO", guard: "tx", askOnFail: true, site: rs4Site, label: "▶ Testar só os PINGs com o core VIVO" }
+    { id: "r4TxPingOut", after: "r4TxPingAnchor", name: "RS_4G · só PING VIVO", guard: "tx", askOnFail: true, site: rs4Site, pingOnly: true, label: "▶ Testar só os PINGs com o core VIVO" }
   ];
   var BATCH = 5;
   var MML_RE = /^(?:[A-Z][A-Z0-9]*\s+[A-Z0-9_]+|PING)\s*:.*;$/i;       // PING não tem objeto ("PING:SN=...;")
@@ -528,8 +528,10 @@
     if (running) { showOv(); return; }
     var s = window.MAE.state();
     if (!s.online || !s.logged) { alert("Para executar no site, conecte primeiro no painel \"Executar no MAE\" da aba Entrada (usuário e senha do MAE)."); return; }
-    if (!siteName()) { alert("Nenhum site carregado. Carregue o site na aba Entrada (Rodada 1)."); return; }
-    var r1 = siteFromR1();
+    if (f.pingOnly) {                                // só PING (leitura): vale o site escolhido no RS_4G, sem exigir a Rodada 1 da Entrada
+      if (!(f.site && f.site())) { alert("Escolha o site na etapa 0 do RS_4G e rode o “Ler TX do MAE” antes."); return; }
+    } else if (!siteName()) { alert("Nenhum site carregado. Carregue o site na aba Entrada (Rodada 1)."); return; }
+    var r1 = f.pingOnly ? "" : siteFromR1();
     if (r1 && r1.toUpperCase() !== siteName().toUpperCase()) {
       alert("Por segurança, não vou executar: o site carregado (" + siteName() + ") é diferente do site das respostas da Rodada 1 (" + r1 + ").\n\nRode de novo a Rodada 1 do site certo na aba Entrada.");
       return;
