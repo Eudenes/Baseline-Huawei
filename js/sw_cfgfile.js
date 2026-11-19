@@ -520,7 +520,7 @@
     for (var w = 0; window.MAE.state().busy && w < 60; w++) { $("wcSt").className = "sw-chip c-wt"; $("wcSt").textContent = "aguardando o MAE para o LST NODE…"; await new Promise(function (r) { setTimeout(r, 3000); }); }
     if (window.MAE.state().busy) throw new Error("O MAE está ocupado: preciso do LST NODE de " + neName + " para saber se é 3G puro. Tente de novo em instantes.");
     $("wcSt").className = "sw-chip c-run"; $("wcSt").textContent = "LST NODE em " + neName + "…";
-    window.MAE.setBusy(true);
+    window.MAE.setBusy(true, "o LST NODE (aba BKP, CFGFILE e SW)");
     try {
       var r = await call("/run", { ne: neName, cmds: ["LST NODE:;"] });
       if (r.status !== 200 || !Array.isArray(r.j)) throw new Error(errMsg(r));
@@ -768,7 +768,7 @@
     if (window.MAE.state().busy) { $("lsSt").className = "sw-chip c-no"; $("lsSt").textContent = "MAE ocupado — clique em Atualizar"; return; }
     ls.busy = true; $("lsRun").disabled = true;
     $("lsSt").className = "sw-chip c-run"; $("lsSt").textContent = "consultando " + neName + "…";
-    window.MAE.setBusy(true);
+    window.MAE.setBusy(true, "o LST SOFTWARE (aba BKP, CFGFILE e SW)");
     try {
       var r = await call("/run", { ne: neName, cmds: ["LST SOFTWARE:;"] });
       if (r.status !== 200 || !Array.isArray(r.j)) throw new Error(errMsg(r));
@@ -805,7 +805,7 @@
     if (window.MAE.state().busy) throw new Error("O painel do MAE está executando algo. Tente de novo em instantes.");
     var out = $("swStOut"); out.hidden = false; out.textContent = "Consultando " + R.ne + " (" + cmd + ")…";
     var e = addLog({ ne: R.ne, op: "Verificar status", item: cmd, state: "running", cmd: cmd });
-    window.MAE.setBusy(true);
+    window.MAE.setBusy(true, "a verificação de status (aba BKP, CFGFILE e SW)");
     try {
       var r = await call("/run", { ne: R.ne, cmds: [cmd] });
       if (r.status !== 200 || !Array.isArray(r.j)) throw new Error(errMsg(r));

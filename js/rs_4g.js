@@ -1014,7 +1014,8 @@
       else add("// eNodeB ID já está igual à planilha");
       add("RST APP:AID=" + p.aid + ";");
       wait();
-      add("", "// CELLOP — novos TAs (TIM " + M.taTim + " / VIVO " + M.taVivo + (M.iotTa ? " · NB-IoT " + M.iotTim + "/" + M.iotVivo : "") + ") em todas as células", "LST CELLOP:;");
+      add("", "// CELLOP — novos TAs (TIM " + M.taTim + " / VIVO " + M.taVivo + (M.iotTa ? " · NB-IoT " + M.iotTim + "/" + M.iotVivo : "") + ") em todas as células",
+        "// espera 20 s antes da lista de CELLOP (logo depois do reset o eNodeB responde System Busy)", "#WAIT 20", "LST CELLOP:;");
       M.cells.forEach(function (a) {
         var c = a.c, tt = c.nb ? (M.iotTa ? [M.iotTim, M.iotVivo] : []) : [M.taTim, M.taVivo];
         if (c.nb && !M.iotTa) { add("// célula NB-IoT " + c.id + ": site sem TA de NB-IoT — CELLOP não gerado"); return; }
@@ -1068,6 +1069,7 @@
           ",CELLID=" + n.cellId + ",PHYCELLID=" + n.pci + ",FDDTDDIND=CELL_FDD,EUCELLSTANDBYMODE=ACTIVE,ROOTSEQUENCEIDX=" + n.rsi + ",HIGHSPEEDFLAG=LOW_SPEED,CUSTOMIZEDBANDWIDTHCFGIND=NOT_CFG,UEPOWERMAXCFGIND=CFG,UEPOWERMAX=23,MULTIRRUCELLFLAG=BOOLEAN_FALSE,TXRXMODE=" + n.txrx + ";");
       });
       news.forEach(function (n) { add("ADD EUCELLSECTOREQM:LOCALCELLID=" + n.id + ",SECTOREQMID=" + n.se + ",BASEBANDEQMID=" + n.bb + ";"); });
+      if (news.length) add("// espera 20 s antes da lista de CELLOP (evita System Busy)", "#WAIT 20");
       news.forEach(function (n) {
         var tt = n.moran ? [M.ta0, M.taVivo] : [M.ta0, M.taTim, M.taVivo];
         tt.forEach(function (ta) { add("ADD CELLOP:LOCALCELLID=" + n.id + ",TRACKINGAREAID=" + ta + ",MMECFGNUM=CELL_MME_CFG_NUM_0;"); });
@@ -1259,7 +1261,24 @@
       : chip("wa", "não carregada") + " selecione o arquivo da base";
   }
 
+  // re-render sem perder a posição: guarda a rolagem das listas (.tw) e da página e devolve depois
+  function keepScroll() {
+    var o = { tw: {}, anc: [] }, p = pane;
+    var twKeys = function (fn) { var n = {}; pane.querySelectorAll(".tw").forEach(function (el) { var h = el.parentElement && el.parentElement.closest("[id]"), id = h ? h.id : ""; n[id] = (n[id] || 0) + 1; fn(id + "#" + n[id], el); }); };
+    twKeys(function (k, el) { o.tw[k] = [el.scrollTop, el.scrollLeft]; });
+    while (p) { if (p.scrollTop || p.scrollLeft) o.anc.push([p, p.scrollTop, p.scrollLeft]); p = p.parentElement; }
+    var se = document.scrollingElement || document.documentElement; o.win = [se, se.scrollTop, se.scrollLeft];
+    return function () {
+      twKeys(function (k, el) { var x = o.tw[k]; if (x) { el.scrollTop = x[0]; el.scrollLeft = x[1]; } });
+      o.anc.forEach(function (x) { x[0].scrollTop = x[1]; x[0].scrollLeft = x[2]; });
+      o.win[0].scrollTop = o.win[1]; o.win[0].scrollLeft = o.win[2];
+    };
+  }
   function render() {
+    var back = keepScroll();
+    try { render0(); } finally { back(); }
+  }
+  function render0() {
     S.plan = planOf(S.site);
     M = model();
     // chips do topo
@@ -1526,7 +1545,7 @@
     var s = window.MAE.state();
     if (!s.online || !s.logged) { st.textContent = "Conecte no MAE (aba Entrada → Executar no MAE)."; return; }
     if (s.busy) { st.textContent = "O painel do MAE está ocupado — tente em instantes."; return; }
-    btn.disabled = true; window.MAE.setBusy(true);
+    btn.disabled = true; window.MAE.setBusy(true, "a leitura TX (aba RS_4G)");
     st.textContent = "lendo " + ne + " (" + TX_READ.length + " comandos)…";
     try {
       var r = await call("/run", { ne: ne, cmds: TX_READ });
@@ -1649,7 +1668,7 @@
     }
     // 2) comandos extras do RS
     st.textContent = entMsg + "lendo " + ne + " (" + READ_CMDS.length + " comandos RS)…";
-    window.MAE.setBusy(true);
+    window.MAE.setBusy(true, "a leitura RS (aba RS_4G)");
     try {
       var r = await call("/run", { ne: ne, cmds: READ_CMDS });
       if (r.status !== 200 || !Array.isArray(r.j)) throw new Error((r.j && (r.j.message || r.j.error)) || ("erro HTTP " + r.status));

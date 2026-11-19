@@ -18,7 +18,7 @@
   var WRITE_RE = /^\s*(ADD|MOD|RMV|SET|ACT|DLD|RST|BLK|UBL|STR|STP)\s/i;
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
-  var autoNe = false, neList = [], abort = false, busy = false, online = false, logged = false, logLines = [], transcript = [];
+  var autoNe = false, neList = [], abort = false, busy = false, busyWho = "", online = false, logged = false, logLines = [], transcript = [];
 
   if (!$("pane-in") || !$("uniCmds") || !$("uniIn") || !$("uniGo")) { console.warn("[MAE] aba Entrada não encontrada"); return; }
 
@@ -124,7 +124,45 @@
     ["maeSite", "maeReload", "maeGo", "maeOnly1"].forEach(function (i) { $(i).disabled = !online || !logged || busy; });
     $("maeAllTypes").disabled = busy;
     $("maeStop").disabled = !busy;
+    lockButtons();
   }
+
+  // ---------- MAE ocupado: trava só os botões que mandam comando para o MAE (as abas continuam navegáveis) ----------
+  // Os botões ganham a classe .mae-locked (+ aviso no mouse) e o clique é barrado; não mexe no .disabled de cada aba.
+  var LOCK_IDS = ["r4ReadMae", "r4TxReadMae", "lsRun", "swStatus"];
+  var OWN_IDS = ["maeLogin", "maeLogout", "maeSite", "maeReload", "maeGo", "maeOnly1"];
+  function busyWhy() { return "Bloqueado: o MAE está executando " + (busyWho || "outro comando") + ". Espere terminar (ou pare a execução) para usar este botão — dá para navegar nas outras abas normalmente."; }
+  function lockButtons() {
+    var els = [].slice.call(document.querySelectorAll("button.mae-run, [data-mae-lock]"));
+    LOCK_IDS.forEach(function (id) { var e = $(id); if (e && els.indexOf(e) < 0) els.push(e); });
+    els.forEach(function (el) {
+      if (busy) {
+        if (!el.classList.contains("mae-locked")) { el.setAttribute("data-mae-title", el.getAttribute("title") || ""); el.classList.add("mae-locked"); el.setAttribute("aria-disabled", "true"); }
+        el.title = busyWhy();
+      } else if (el.classList.contains("mae-locked")) {
+        el.classList.remove("mae-locked"); el.removeAttribute("aria-disabled");
+        var t = el.getAttribute("data-mae-title"); if (t) el.title = t; else el.removeAttribute("title");
+        el.removeAttribute("data-mae-title");
+      }
+    });
+    OWN_IDS.forEach(function (id) {
+      var e = $(id); if (!e) return;
+      if (busy) { if (!e.hasAttribute("data-mae-title")) e.setAttribute("data-mae-title", e.getAttribute("title") || ""); e.title = busyWhy(); }
+      else if (e.hasAttribute("data-mae-title")) { var t = e.getAttribute("data-mae-title"); if (t) e.title = t; else e.removeAttribute("title"); e.removeAttribute("data-mae-title"); }
+    });
+  }
+  var lockCss = document.createElement("style");
+  lockCss.textContent = ".mae-locked{opacity:.45!important;cursor:not-allowed!important;filter:grayscale(.4)}" +
+    "#maeToast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;max-width:min(560px,92vw);background:#1d2433;color:#fff;font:13px/1.4 'Segoe UI',Arial,sans-serif;padding:10px 16px;border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.3)}";
+  document.head.appendChild(lockCss);
+  var toastT = null;
+  document.addEventListener("click", function (e) {
+    var b = e.target && e.target.closest && e.target.closest(".mae-locked");
+    if (!b) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    var t = $("maeToast"); if (!t) { t = document.createElement("div"); t.id = "maeToast"; document.body.appendChild(t); }
+    t.textContent = busyWhy(); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, 4000);
+  }, true);
 
   function fillList() {
     var all = $("maeAllTypes").checked;
@@ -197,7 +235,7 @@
     else if (neList.length && !confirm(ne + " não está na lista de NEs do MAE. Continuar mesmo assim?")) return { ok: false, error: "Cancelado pelo usuário." };
     var result = { ok: true, ne: ne };
     var c1 = cmdsFrom("uniCmds");
-    abort = false; busy = true; transcript = []; refresh();
+    abort = false; busy = true; busyWho = "a leitura do site " + ne + " (aba Entrada)"; transcript = []; refresh();
     var t0 = Date.now();
     try {
       // ---- Rodada 1 ----
@@ -227,7 +265,7 @@
       result = { ok: false, ne: ne, error: e.message };
     } finally {
       await api("/unreg", {}).catch(function () {});
-      busy = false; refresh();
+      busy = false; busyWho = ""; refresh();
     }
     return result;
   }
@@ -253,7 +291,7 @@
   $("maeLogin").addEventListener("click", function () {
     var u = $("maeUser").value.trim(), pw = $("maePwd").value;
     if (!u || !pw) { alert("Informe usuário e senha do MAE."); return; }
-    busy = true; refresh(); log("Conectando como " + u + "…", "in");
+    busy = true; busyWho = "o login"; refresh(); log("Conectando como " + u + "…", "in");
     api("/login", { user: u, pwd: pw }).then(function (r) {
       try { localStorage.setItem("maeUser", u); } catch (e) {}
       logged = true; autoNe = true; busy = false; refresh(r.user || u); log("Login OK.", "ok");
@@ -305,7 +343,7 @@
     api: api,
     state: function () { return { online: online, logged: logged, busy: busy, user: $("maeUser").value, version: helperVersion }; },
     neList: function () { return neList; },
-    setBusy: function (v) { busy = !!v; refresh(); },
+    setBusy: function (v, who) { busy = !!v; busyWho = busy ? String(who || "") : ""; refresh(); },
     // carrega o site na aba Entrada (Rodada 1 + Rodada 2) — usado pela aba RS_4G
     loadSite: function (ne, both) { return go(both !== false, ne); },
     log: log

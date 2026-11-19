@@ -447,6 +447,9 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
 .scP .util i{display:inline-block;height:7px;border-radius:4px;background:#22a35a}
 .scP .util.mid i{background:#e09a00}.scP .util.low i{background:#d0362b}
 .scP .pw-scripthead{display:flex;align-items:center;gap:12px}
+.scP .pw-imp{font:600 11.5px var(--font);border-radius:5px;padding:3px 8px;cursor:pointer;border:1px solid #9aa6e8;background:#eef0ff;color:#2c3a9e;white-space:nowrap}
+.scP .pw-imp:hover{background:#e0e5ff}.scP .pw-imp.back{border-color:#e3c88a;background:#fffbea;color:#8a5a00}.scP .pw-imp.back:hover{background:#fff3cc}
+.scP .pw-imp:disabled{opacity:.45;cursor:not-allowed}
 .scP .pw-chk{font-size:12.5px;display:flex;gap:6px;align-items:center;margin-left:auto;margin-bottom:10px}
 .scP .pw-scripts{display:grid;grid-template-columns:3fr 2fr;gap:14px}
 .scP .pw-sl{font-size:12px;font-weight:700;color:var(--c-muted);margin-bottom:4px}
@@ -1644,7 +1647,10 @@ MOD NRDUCELLPUSCH:NRDUCELLID=11,ULSMARTPREALLOCATIONDUR=250;
   </section>
 
   <section class="pw-card">
-    <h3 class="pw-h">2 · Células LTE</h3>
+    <div class="pw-scripthead">
+      <h3 class="pw-h">2 · Células LTE</h3>
+      <button class="pw-btn ghost" type="button" id="pwImpAll" title="Copia o PA e o PB que já estão configurados no site para o Proposto de todas as células">⇐ Importar PA/PB atuais (todas)</button>
+    </div>
     <div class="pw-tblwrap" id="pwTbl"></div>
   </section>
 
@@ -4576,6 +4582,15 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     return { ap: ap.join("\n"), rb: rb.join("\n"), n: n };
   }
 
+  // ===== importar PA/PB atuais =====
+  function canImp(r) { return !r.block && r.cur.pa != null && PA_ENUM[paKey(r.cur.pa)] && r.cur.pb != null && r.cur.pb >= 0 && r.cur.pb <= 3; }
+  function isImp(r) { var e = ed.c[r.id] || {}; return canImp(r) && e.pa != null && e.pa !== "" && +e.pa === r.cur.pa && e.pb != null && e.pb !== "" && +e.pb === r.cur.pb; }
+  function setImp(r, on) {
+    var c = ed.c[r.id] || (ed.c[r.id] = {});
+    if (on) { c.pa = r.cur.pa; c.pb = r.cur.pb; } else { delete c.pa; delete c.pb; }
+    if (!Object.keys(c).length) delete ed.c[r.id];
+  }
+
   // ===== render =====
   function opts(list, v, labelFn, withGlobal) {
     return (withGlobal != null ? '<option value="">padrão (' + esc(labelFn(withGlobal)) + ')</option>' : "") + list.map(function (x) { return '<option value="' + x + '"' + (v !== "" && v != null && +v === +x ? " selected" : "") + ">" + labelFn(x) + "</option>"; }).join("");
@@ -4600,8 +4615,8 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   }
   function table(R) {
     var h = '<table class="pw"><thead><tr><th rowspan="2" class="ck"><input type="checkbox" id="pwAll" title="Marcar/desmarcar todas"></th><th rowspan="2">Célula</th><th rowspan="2">Banda</th><th rowspan="2">BW</th><th rowspan="2">Portas</th><th rowspan="2">RRU</th>' +
-      '<th class="grp" colspan="5">Potência por canal (W)</th><th class="grp" colspan="3">Atual</th><th class="grp" colspan="5">Proposto</th><th rowspan="2">Observações</th></tr><tr>' +
-      '<th>RRU</th><th>LTE juntas</th><th>3G (W)</th><th>Auto</th><th>Usar</th><th>RS</th><th>PA</th><th>PB</th><th>RS</th><th>PA</th><th>PB</th><th>RSmml</th><th>Uso</th></tr></thead><tbody>';
+      '<th class="grp" colspan="5">Potência por canal (W)</th><th class="grp" colspan="4">Atual</th><th class="grp" colspan="5">Proposto</th><th rowspan="2">Observações</th></tr><tr>' +
+      '<th>RRU</th><th>LTE juntas</th><th>3G (W)</th><th>Auto</th><th>Usar</th><th>RS</th><th>PA</th><th>PB</th><th title="Importar o PA/PB atuais para o Proposto">PA/PB</th><th>RS</th><th>PA</th><th>PB</th><th>RSmml</th><th>Uso</th></tr></thead><tbody>';
     R.rows.forEach(function (r) {
       var u = r.rruU, k = r.k;
       var rru = u ? esc((u.model || u.type || "RRU") + " · " + u.cab + "/" + u.srn + "/" + u.slot) : '<span class="muted">—</span>';
@@ -4616,7 +4631,10 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
         '<td><input class="ed' + (r.e.umts != null && r.e.umts !== "" ? " man" : "") + '" type="number" step="0.1" min="0" data-f="umts" data-id="' + esc(r.id) + '" value="' + esc(r.e.umts != null && r.e.umts !== "" ? r.e.umts : r.umtsAuto) + '" title="' + esc(r.umtsTxt || "sem 3G lido nas mesmas portas") + '"></td>' +
         '<td class="mono">' + fmt(r.autoW) + (r.splitTxt ? ' <span class="muted">' + esc(r.splitTxt) + "</span>" : "") + "</td>" +
         '<td><input class="ed' + (r.man ? " man" : "") + '" type="number" step="1" min="1" data-f="w" data-id="' + esc(r.id) + '" value="' + (r.man ? esc(r.e.w) : "") + '" placeholder="' + fmt(r.autoW) + '"></td>' +
-        '<td class="cur mono">' + (r.cur.rsMml != null ? r.cur.rsMml : "—") + '</td><td class="cur mono">' + (r.cur.pa != null ? fmt(r.cur.pa) : "—") + '</td><td class="cur mono">' + (r.cur.pb != null ? r.cur.pb : "—") + "</td>";
+        '<td class="cur mono">' + (r.cur.rsMml != null ? r.cur.rsMml : "—") + '</td><td class="cur mono">' + (r.cur.pa != null ? fmt(r.cur.pa) : "—") + '</td><td class="cur mono">' + (r.cur.pb != null ? r.cur.pb : "—") + "</td>" +
+        "<td>" + (canImp(r) ? (isImp(r) ? '<button type="button" class="pw-imp back" data-imp="' + esc(r.id) + '" title="Voltar o PA/PB desta célula ao padrão (' + esc(paLbl(ed.g.pa)) + " / PB " + ed.g.pb + ')">↺ padrão</button>' :
+          '<button type="button" class="pw-imp" data-imp="' + esc(r.id) + '" title="Usar no Proposto o PA/PB que já está no site (' + esc(paLbl(r.cur.pa)) + " / PB " + r.cur.pb + ')">⇐ importar</button>') :
+          '<span class="muted" title="' + (r.block ? "célula não calculada" : "sem PA/PB atual (rode LST PDSCHCFG e LST CELLDLPCPDSCHPA)") + '">—</span>') + "</td>";
       if (k) {
         h += '<td class="new' + (r.cur.rsMml != null && r.cur.rsMml !== k.rsMml ? " chg" : "") + '">' + fmt(k.rs, 1) + " dBm</td>" +
           '<td class="new' + (r.cur.pa != null && r.cur.pa !== r.pa ? " chg" : "") + '"><select class="ed" data-f="pa" data-id="' + esc(r.id) + '">' + opts(PA_LIST, r.e.pa, paLbl, ed.g.pa) + "</select></td>" +
@@ -4627,9 +4645,9 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     });
     R.iot.forEach(function (c) {
       var cu = R.cur.cells[c.id] || {};
-      h += '<tr class="iot"><td></td><td class="st"><b class="mono">' + esc(c.id) + '</b> <span class="muted">' + esc(c.name) + '</span></td><td>' + esc(c.band || "—") + '</td><td>NB-IoT</td><td colspan="7"></td><td class="mono">' + (cu.rsMml != null ? cu.rsMml : "—") + '</td><td class="mono">' + (cu.pa != null ? fmt(cu.pa) : "—") + '</td><td class="mono">' + (cu.pb != null ? cu.pb : "—") + '</td><td colspan="5" class="muted">não mexe</td><td><span class="flag">NB-IoT</span></td></tr>';
+      h += '<tr class="iot"><td></td><td class="st"><b class="mono">' + esc(c.id) + '</b> <span class="muted">' + esc(c.name) + '</span></td><td>' + esc(c.band || "—") + '</td><td>NB-IoT</td><td colspan="7"></td><td class="mono">' + (cu.rsMml != null ? cu.rsMml : "—") + '</td><td class="mono">' + (cu.pa != null ? fmt(cu.pa) : "—") + '</td><td class="mono">' + (cu.pb != null ? cu.pb : "—") + '</td><td></td><td colspan="5" class="muted">não mexe</td><td><span class="flag">NB-IoT</span></td></tr>';
     });
-    if (!R.rows.length && !R.iot.length) h += '<tr><td colspan="20" class="muted" style="padding:16px">Nenhuma célula LTE. Processe a rodada 1 na aba <b>Entrada</b> (com LST CELL, LST PDSCHCFG e LST CELLDLPCPDSCHPA).</td></tr>';
+    if (!R.rows.length && !R.iot.length) h += '<tr><td colspan="21" class="muted" style="padding:16px">Nenhuma célula LTE. Processe a rodada 1 na aba <b>Entrada</b> (com LST CELL, LST PDSCHCFG e LST CELLDLPCPDSCHPA).</td></tr>';
     $("pwTbl").innerHTML = h + "</tbody></table>";
     var ok = R.rows.filter(function (r) { return !r.block; }), on = ok.filter(function (r) { return !ed.off[r.id]; }).length, all = $("pwAll");
     all.checked = ok.length > 0 && on === ok.length; all.indeterminate = on > 0 && on < ok.length; all.disabled = !ok.length;
@@ -4639,12 +4657,19 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
     var R = compute(); last = R;
     if (!R) return;
     if (sel && !R.rows.some(function (r) { return r.id === sel; })) sel = null;
-    chips(R); msgs(R); table(R);
+    chips(R); msgs(R); table(R); impAllBtn(R);
     var s = scripts(R);
     $("pwScript").textContent = s.ap || "— nada para aplicar —";
     $("pwRb").textContent = s.rb || "—";
     $("pwCnt").textContent = s.n ? "(" + s.n + " célula" + (s.n > 1 ? "s" : "") + ", " + s.n * 2 + " comandos)" : "";
     syncCfg();
+  }
+  function impAllBtn(R) {
+    var b = $("pwImpAll"), ok = R.rows.filter(canImp), all = ok.length > 0 && ok.every(isImp);
+    b.disabled = !ok.length; b.dataset.on = all ? "1" : "";
+    b.textContent = all ? "↺ PA/PB padrão (todas)" : "⇐ Importar PA/PB atuais (todas)";
+    b.title = !ok.length ? "Nenhuma célula com PA/PB atual lido (rode LST PDSCHCFG e LST CELLDLPCPDSCHPA na rodada 1)" :
+      all ? "Voltar todas as células ao padrão (" + paLbl(ed.g.pa) + " / PB " + ed.g.pb + ")" : "Copia o PA e o PB que já estão configurados no site para o Proposto de todas as células (" + ok.length + ")";
   }
   function syncCfg() {
     $("pwPa").value = String(ed.g.pa); $("pwPb").value = String(ed.g.pb); $("pwSplit").value = ed.g.split;
@@ -4680,6 +4705,12 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
         var on = t.checked; (last ? last.rows : []).forEach(function (r) { if (!r.block) { if (on) delete ed.off[r.id]; else ed.off[r.id] = true; } });
         setTimeout(changed, 0); return;
       }
+      var im = t.closest && t.closest("[data-imp]");
+      if (im) {
+        var rr = last && last.rows.filter(function (x) { return x.id === im.getAttribute("data-imp"); })[0];
+        if (rr && canImp(rr)) { setImp(rr, !isImp(rr)); sel = rr.id; setTimeout(changed, 0); }
+        return;
+      }
       var ck = t.getAttribute && t.getAttribute("data-ck");
       if (ck) { if (t.checked) delete ed.off[ck]; else ed.off[ck] = true; setTimeout(changed, 0); return; }
       if (t.closest("input,select")) return;
@@ -4687,6 +4718,12 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
       sel = tr.getAttribute("data-id");
       [].forEach.call($("pwTbl").querySelectorAll("tr.sel"), function (x) { x.classList.remove("sel"); });
       tr.classList.add("sel");
+    });
+    $("pwImpAll").addEventListener("click", function () {
+      if (!last) return;
+      var on = this.dataset.on !== "1";
+      last.rows.filter(canImp).forEach(function (r) { setImp(r, on); });
+      changed();
     });
     function copy(id, btn) {
       var t = $(id).textContent, o = btn.textContent;

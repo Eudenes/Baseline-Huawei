@@ -57,6 +57,12 @@
     ".mx-card{border:1px solid #dfe3eb;border-radius:10px;padding:12px 14px;margin:12px 0}",
     ".mx-card h4{margin:0 0 8px;font-size:14px}.mx-card p{margin:6px 0;color:#475467}",
     ".mx-warn{background:#fff3dc;color:#8a5a00;border-radius:6px;padding:8px 10px;margin:8px 0}",
+    "#mxAsk{margin-top:8px;border:2px solid #c7000b;background:#fdecec;border-radius:8px;padding:8px 12px;color:#7a0007}",
+    "#mxAsk .bt{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}",
+    "#mxAsk button{font-family:'Segoe UI',Arial,sans-serif;font-weight:600;font-size:13px;border-radius:6px;padding:7px 13px;cursor:pointer;border:1px solid #dfe3eb;background:#fff;color:#1d2433}",
+    "#mxAsk button.pri{background:#16613a;border-color:#16613a;color:#fff}#mxAsk button.dan{background:#c7000b;border-color:#c7000b;color:#fff}",
+    "#mxMini{position:fixed;right:18px;bottom:18px;z-index:9997;max-width:min(520px,90vw);font:600 13px 'Segoe UI',Arial,sans-serif;border:0;border-radius:22px;padding:10px 16px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.28);background:#1d2433;color:#fff;text-align:left}",
+    "#mxMini.ok{background:#16613a}#mxMini.er{background:#c7000b}#mxMini small{display:block;font-weight:400;opacity:.85;font-size:11.5px}",
     ".mx-pre{background:#111827;color:#a7f3d0;font:12.5px/1.4 Consolas,monospace;border-radius:6px;padding:8px 10px;max-height:150px;overflow:auto;white-space:pre}"
   ].join("\n");
   document.head.appendChild(st);
@@ -97,11 +103,12 @@
   }
 
   // ---------- tela ----------
-  var ov = null, items = [], abort = false, running = false, field = null, ne = "", stopMsg = "", lastAid = "", labelOk = null;
+  var ov = null, items = [], abort = false, running = false, field = null, ne = "", stopMsg = "", lastAid = "", labelOk = null, stopAt = null, askRes = null, endTxt = "";
   function openScreen(f, cmds, skipped) {
     field = f; ne = (f.site && f.site()) || siteName(); abort = false;
     items = cmds.map(function (c, i) { return { idx: i, line: c.line, cmd: c.cmd, st: "pd", msg: "", msg1: "", resp: "" }; });
     if (ov) ov.remove();
+    endTxt = ""; stopAt = null;
     ov = document.createElement("div"); ov.id = "mxOv";
     var writes = cmds.filter(function (c) { return /^(ADD|MOD|RMV|SET|ACT|DLD|RST|BLK|UBL|STR|STP|DEA|DEL)\s/i.test(c.cmd); }).length;
     var known = (window.MAE.neList() || []).some(function (n) { return n.name === ne; });
@@ -113,7 +120,7 @@
             (skipped.length ? ' · ' + skipped.length + ' linha(s) que não são comando foram ignoradas' : '') +
             (f.retry ? ' · falhas são repetidas no fim' : '') + '</div>' +
           '<div id="mxBar"><div id="mxFill"></div><div id="mxPct">0%</div></div>' +
-          '<div id="mxStats"></div></div>' +
+          '<div id="mxStats"></div><div id="mxAsk" hidden></div></div>' +
         '<div id="mxBody">' +
           (!known && (window.MAE.neList() || []).length ? '<div class="mx-warn">⚠ ' + esc(ne) + ' não está na lista de NEs do MAE.</div>' : '') +
           (skipped.length ? '<details style="margin:8px 0"><summary class="mx-warn" style="cursor:pointer">Linhas ignoradas (não parecem comando MML): ' + skipped.length + '</summary><div class="mx-pre">' + esc(skipped.slice(0, 200).join("\n")) + '</div></details>' : '') +
@@ -124,6 +131,8 @@
         '<div id="mxFoot">' +
           '<button class="pri" id="mxGo">▶ Executar agora em ' + esc(ne) + '</button>' +
           '<button class="dan" id="mxStop" disabled>Parar</button>' +
+          '<button class="pri" id="mxResume" hidden></button>' +
+          '<button id="mxMin" hidden title="Esconde esta janela para navegar nas outras abas; a execução continua. Use o aviso no canto da tela para voltar.">⤓ Minimizar (navegar nas abas)</button>' +
           '<label><input type="checkbox" id="mxOnlyFail"> só falhas</label>' +
           '<span class="sp"></span>' +
           '<button id="mxCopyFail" disabled>Copiar falhas</button>' +
@@ -133,9 +142,13 @@
         '</div></div>';
     document.body.appendChild(ov);
     stats();
-    $("mxGo").onclick = run;
-    $("mxStop").onclick = function () { abort = true; $("mxStop").disabled = true; $("mxStop").textContent = "Parando…"; };
-    $("mxClose").onclick = function () { if (running && !confirm("A execução está em andamento. Parar e fechar?")) return; abort = true; ov.remove(); ov = null; };
+    $("mxGo").onclick = function () { run(); };
+    $("mxStop").onclick = function () { abort = true; $("mxStop").disabled = true; $("mxStop").textContent = "Parando…"; if (askRes) askRes("stop"); };
+    $("mxMin").onclick = minimize;
+    $("mxClose").onclick = function () {
+      if (running && !confirm("A execução está em andamento. Parar e fechar?\n\n(Para só navegar nas outras abas sem parar, use “Minimizar”.)")) return;
+      abort = true; if (askRes) askRes("stop"); ov.remove(); ov = null; mini();
+    };
     $("mxOnlyFail").onchange = function () { $("mxBody").classList.toggle("onlyfail", this.checked); };
     $("mxCopyFail").onclick = function () { copy(items.filter(function (it) { return it.st === "er"; }).map(function (it) { return it.cmd; }).join("\n"), this); };
     $("mxExport").onclick = exportLog;
@@ -143,20 +156,37 @@
 
   function setRow(it) {
     var tr = $("mxr" + it.idx); if (!tr) return;
-    var lab = { pd: "• aguardando", run: "⏳ executando", ok: "✔ ok", er: "✖ falhou", rt: "↻ ok na 2ª", er2: "✖ falhou 2×" }[it.st];
+    var lab = { pd: "• aguardando", run: "⏳ executando", ok: "✔ ok", er: "✖ falhou", rt: field && field.retry ? "↻ ok na 2ª" : "↻ ok ao repetir", er2: "✖ falhou 2×" }[it.st];
     tr.className = it.st === "er2" ? "er" : it.st;
     tr.children[1].innerHTML = '<span class="' + ({ ok: "mx-ok", er: "mx-er", er2: "mx-er", rt: "mx-rt" }[it.st] || "") + '">' + lab + "</span>";
     tr.children[3].textContent = it.st === "rt" ? "1ª: " + it.msg1 : it.msg;
   }
   function stats(phase, done, total) {
+    if (!ov) { mini(); return; }
     var c = { ok: 0, er: 0, rt: 0, er2: 0, pd: 0 };
     items.forEach(function (it) { c[it.st === "run" ? "pd" : it.st]++; });
     var pct = total ? Math.round(done * 100 / total) : 0;
     $("mxFill").style.width = pct + "%"; $("mxFill").className = phase === 2 ? "p2" : "";
     $("mxPct").textContent = (phase === 2 ? "2ª tentativa · " : "") + pct + "%" + (total ? " (" + done + "/" + total + ")" : "");
     $("mxStats").innerHTML = '<span class="mx-ok">✔ <b class="mx-ok">' + c.ok + '</b> ok</span>' +
-      (field && field.retry ? '<span class="mx-rt">↻ <b class="mx-rt">' + c.rt + '</b> ok na 2ª</span>' : '') +
+      (field && (field.retry || c.rt) ? '<span class="mx-rt">↻ <b class="mx-rt">' + c.rt + '</b> ' + (field.retry ? "ok na 2ª" : "ok ao repetir") + '</span>' : '') +
       '<span class="mx-er">✖ <b class="mx-er">' + (c.er + c.er2) + '</b> falha(s)</span><span>• <b>' + c.pd + '</b> pendente(s)</span>';
+    mini();
+  }
+
+  // ---------- minimizar: a janela some, a execução continua e um aviso no canto leva de volta ----------
+  function minimize() { if (!ov) return; ov.style.display = "none"; mini(); }
+  function showOv() { if (ov) ov.style.display = ""; mini(); }
+  function mini() {
+    var m = $("mxMini");
+    if (!m) { m = document.createElement("button"); m.type = "button"; m.id = "mxMini"; m.onclick = showOv; document.body.appendChild(m); }
+    if (!ov || ov.style.display !== "none") { m.hidden = true; return; }
+    var c = count(), done = items.length - c.pd - c.run, pct = items.length ? Math.round(done * 100 / items.length) : 0;
+    m.hidden = false;
+    m.className = running ? "" : (c.er + c.er2 || /✖/.test(endTxt) ? "er" : "ok");
+    m.innerHTML = (running ? "⏳ " + esc(field.name) + " · " + pct + "% (" + done + "/" + items.length + ")" : esc((endTxt || "Execução terminada") + " · " + field.name)) +
+      "<small>" + esc(ne) + " · " + c.ok + " ok" + ((c.er + c.er2) ? " · " + (c.er + c.er2) + " falha(s)" : "") + " — clique para abrir</small>";
+    m.title = "Abrir a janela da execução";
   }
 
   // ---------- comandos vigiados (só no script RS_4G: field.guard) ----------
@@ -202,7 +232,7 @@
     if (!labelOk) { it.st = "pd"; it.msg = "pulado (USER LABEL não confirmado)"; setRow(it); return true; }
     var x = await runOne(it.cmd);
     it.resp += x.resp || ""; it.st = x.ok ? "ok" : "er"; it.msg = x.ok ? "" : retMsg(x.resp); setRow(it);
-    if (!x.ok && field.askOnFail && !askGo(it)) return false;
+    if (!x.ok && field.askOnFail && !(await recover(it))) return false;
     return true;
   }
   function sleep(ms) {
@@ -284,11 +314,39 @@
     }
   }
 
-  // RS_4G: comando com erro → pergunta se continua
-  function askGo(it) {
-    var go = confirm("O comando falhou em " + ne + ":\n\n  " + it.cmd + "\n  → " + (it.msg || "erro") + "\n\nOK = continuar com os próximos · Cancelar = parar aqui");
-    if (!go) stopMsg = "Parado por você após o erro em: " + it.cmd + " → " + (it.msg || "erro") + ".";
-    return go;
+  // RS_4G: comando com erro → pergunta: executar de novo (e seguir daqui se der certo), pular ou parar
+  function ask(it) {
+    return new Promise(function (res) {
+      showOv();
+      var b = $("mxAsk");
+      askRes = function (a) { askRes = null; b.hidden = true; b.innerHTML = ""; b.onclick = null; res(a); };
+      b.innerHTML = '<b>✖ O comando da linha ' + it.line + ' falhou em ' + esc(ne) + ':</b><div class="mx-pre" style="margin:6px 0;max-height:70px">' + esc(it.cmd) + '</div>→ ' + esc(it.msg || "erro") +
+        '<div class="bt"><button class="pri" type="button" data-a="retry">↻ Executar este comando de novo</button><button type="button" data-a="skip">Pular e continuar</button><button class="dan" type="button" data-a="stop">Parar aqui</button></div>' +
+        '<div style="font-size:12px;margin-top:6px">Se a nova tentativa der certo, a execução continua a partir daqui. Se parar, dá para continuar depois com <b>Continuar da linha ' + it.line + '</b>.</div>';
+      b.onclick = function (e) { var a = e.target.getAttribute && e.target.getAttribute("data-a"); if (a && askRes) askRes(a); };
+      b.hidden = false;
+      var tr = $("mxr" + it.idx); if (tr) tr.scrollIntoView({ block: "nearest" });
+    });
+  }
+  // devolve true = seguir com os próximos · false = parar. "System Busy" repete sozinho (até 2×, 20 s entre elas)
+  async function recover(it) {
+    var m0 = it.msg, auto = 0;
+    for (;;) {
+      var a;
+      if (abort) a = "stop";
+      else if (/busy/i.test(it.msg || "") && auto < 2) {
+        auto++; it.st = "run"; it.msg = "System Busy — esperando 20 s para repetir sozinho (" + auto + "/2)…"; setRow(it);
+        a = (await sleep(20000)) ? "retry" : "stop";
+      } else a = await ask(it);
+      if (a === "stop") { stopAt = it.idx; if (it.st === "run") { it.st = "er"; it.msg = m0; setRow(it); } stopMsg = stopMsg || "Parado após o erro na linha " + it.line + ": " + it.cmd + " → " + (it.msg || "erro") + "."; return false; }
+      if (a === "skip") { window.MAE.log("Pulado após erro em " + ne + ": " + it.cmd, "in"); return true; }
+      it.st = "run"; it.msg = "executando de novo…"; setRow(it);
+      var x;
+      try { x = await runOne(it.cmd); } catch (e) { it.st = "er"; it.msg = e.message; setRow(it); continue; }
+      it.resp += "\n----- nova tentativa -----\n" + (x.resp || "");
+      if (x.ok) { it.msg1 = m0; it.msg = ""; it.st = "rt"; setRow(it); window.MAE.log("OK ao repetir em " + ne + ": " + it.cmd, "ok"); return true; }
+      it.st = "er"; it.msg = retMsg(x.resp); setRow(it);
+    }
   }
   async function runList(list, phase) {
     var i = 0;
@@ -299,7 +357,7 @@
         var tg = $("mxr" + g.idx); if (tg && !$("mxOnlyFail").checked) tg.scrollIntoView({ block: "nearest" });
         var go = isPing(g) && field.guard === "tx" ? await guardPing(g) : isLabel(g) && field.guard === "tx" ? await guardLabel(g) : /^CFM/i.test(g.cmd) ? await guardCfm(g) : await guardApp(g);
         i++; stats(phase, i, list.length);
-        if (!go) { abort = true; return false; }
+        if (!go) { if (g.st !== "ok" && g.st !== "rt" && stopAt == null) stopAt = g.idx; abort = true; return false; }
         continue;
       }
       var part = [];
@@ -331,22 +389,28 @@
       });
       stats(phase, i, list.length);
       var bad = ask ? part.filter(function (it) { return it.st === "er" && !/^#/.test(it.cmd); })[0] : null;
-      if (bad && !askGo(bad)) { abort = true; return false; }
+      if (bad && !(await recover(bad))) { abort = true; return false; }
     }
     return true;
   }
 
-  async function run() {
+  async function run(from) {
+    var resume = typeof from === "number";
     var s = window.MAE.state();
     if (!s.online || !s.logged) { alert("Conecte no painel \"Executar no MAE\" (aba Entrada) primeiro."); return; }
     for (var w = 0; w < 40 && window.MAE.state().busy; w++) await new Promise(function (r) { setTimeout(r, 250); });
     if (window.MAE.state().busy) { alert("O painel do MAE já está executando algo. Aguarde terminar."); return; }
-    running = true; window.MAE.setBusy(true); stopMsg = ""; lastAid = ""; labelOk = null;
-    $("mxGo").disabled = true; $("mxGo").textContent = "Executando…"; $("mxStop").disabled = false; $("mxClose").textContent = "Fechar";
+    running = true; window.MAE.setBusy(true, field.name + " em " + ne); stopMsg = ""; labelOk = null; stopAt = null; endTxt = ""; abort = false;
+    if (!resume) { lastAid = ""; items.forEach(function (it) { it.st = "pd"; it.msg = ""; it.msg1 = ""; it.resp = ""; setRow(it); }); }
+    var list = resume ? items.slice(from) : items;
+    if (resume) list.forEach(function (it) { if (it.st !== "ok" && it.st !== "rt") { it.st = "pd"; it.msg = ""; setRow(it); } });
+    $("mxGo").disabled = true; $("mxGo").textContent = "Executando…"; $("mxStop").disabled = false; $("mxStop").textContent = "Parar"; $("mxClose").textContent = "Fechar";
+    $("mxResume").hidden = true; $("mxMin").hidden = false;
     var t0 = Date.now(), err = null;
-    window.MAE.log(field.name + ": executando " + items.length + " comandos em " + ne + "…", "in");
+    window.MAE.log(field.name + ": " + (resume ? "continuando da linha " + items[from].line + " (" + list.length + " comandos)" : "executando " + items.length + " comandos") + " em " + ne + "…", "in");
+    stats();
     try {
-      var ok = await runList(items, 1);
+      var ok = await runList(list, 1);
       var fails = items.filter(function (it) { return it.st === "er"; });
       if (ok && field.retry && fails.length) {
         $("mxSite").insertAdjacentHTML("beforeend", ' · <b class="mx-rt">repetindo ' + fails.length + ' falha(s)…</b>');
@@ -356,13 +420,25 @@
     await window.MAE.api("/unreg", {}).catch(function () {});
     running = false; window.MAE.setBusy(false);
     var c = count(), secs = Math.round((Date.now() - t0) / 1000);
+    if (!ov) { window.MAE.log(field.name + " em " + ne + ": janela fechada · " + c.ok + " ok" + ((c.er + c.er2) ? ", " + (c.er + c.er2) + " falha(s)" : ""), (c.er + c.er2) || err ? "er" : "in"); mini(); return; }
     $("mxStop").disabled = true; $("mxStop").textContent = "Parar";
-    $("mxGo").textContent = "▶ Executar de novo"; $("mxGo").disabled = false;
+    $("mxGo").textContent = "▶ Executar tudo de novo"; $("mxGo").disabled = false; $("mxMin").hidden = true;
     $("mxCopyFail").disabled = !(c.er + c.er2); $("mxExport").disabled = false;
     var head = err ? "✖ " + err.message : stopMsg ? "✖ " + stopMsg : abort ? "Interrompido pelo usuário." : "Concluído em " + secs + " s.";
+    if (err || stopMsg || abort) {
+      var rf = stopAt;
+      if (rf == null) for (var q = 0; q < items.length; q++) if (items[q].st === "pd" || items[q].st === "run") { rf = q; break; }
+      if (rf != null) {
+        var rb = $("mxResume"); rb.hidden = false; rb.textContent = "▶ Continuar da linha " + items[rf].line;
+        rb.title = "Executa de novo o comando da linha " + items[rf].line + " (" + items[rf].cmd + ") e segue com os próximos, sem repetir o que já deu certo";
+        rb.onclick = function () { run(rf); };
+      }
+    }
+    endTxt = err || stopMsg ? "✖ Parado" : abort ? "✖ Interrompido" : "✔ Concluído";
     $("mxSite").insertAdjacentHTML("beforeend", '<div style="margin-top:4px" class="' + (err || abort ? "mx-er" : "mx-ok") + '"><b>' + esc(head) + "</b></div>");
     window.MAE.log(field.name + " em " + ne + ": " + c.ok + " ok" + (c.rt ? ", " + c.rt + " ok na 2ª" : "") + ((c.er + c.er2) ? ", " + (c.er + c.er2) + " falha(s)" : "") + " · " + head, (c.er + c.er2) || err ? "er" : "ok");
     if (field.retry && !err && !abort) analyse();
+    mini();
   }
   function count() { var c = { ok: 0, er: 0, rt: 0, er2: 0, pd: 0, run: 0 }; items.forEach(function (it) { c[it.st]++; }); return c; }
 
@@ -448,7 +524,7 @@
 
   // ---------- botões ----------
   function start(f) {
-    if (running) { if (ov) ov.style.display = ""; return; }
+    if (running) { showOv(); return; }
     var s = window.MAE.state();
     if (!s.online || !s.logged) { alert("Para executar no site, conecte primeiro no painel \"Executar no MAE\" da aba Entrada (usuário e senha do MAE)."); return; }
     if (!siteName()) { alert("Nenhum site carregado. Carregue o site na aba Entrada (Rodada 1)."); return; }
