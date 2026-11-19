@@ -1161,6 +1161,8 @@
     "#pane-rs4g .big{font-size:15px;font-weight:700}",
     "#pane-rs4g .r4-drop{display:flex;flex-direction:column;align-items:center;gap:2px;border:2px dashed #9aa6e8;border-radius:10px;padding:14px 8px;background:#f4f6ff;color:#2c3a9e;cursor:pointer;margin-bottom:6px;text-align:center}",
     "#pane-rs4g .r4-drop.over{background:#e3e8ff;border-color:#4f63d8}",
+    "#pane-rs4g .r4-drop.sm{flex-direction:row;justify-content:center;gap:8px;padding:8px;font-size:12.5px;margin:4px 0}",
+    "#pane-rs4g textarea.r4-dropta.over{outline:2px dashed #4f63d8;outline-offset:-2px;background:#eef1ff}",
     "#pane-rs4g .r4-sitebig{font:700 16px Consolas,monospace;color:#1d2433}"
   ].join("\n");
   document.head.appendChild(css);
@@ -1179,7 +1181,8 @@
     '<button class="primary" type="button" id="r4TxSiteGo">Escolher</button><button class="ghost" type="button" id="r4TxSiteEnt" title="usar o site carregado na aba Entrada">Site da Entrada</button></div>' +
     '<div id="r4TxGwSt" class="muted" style="font-size:12px"></div>' +
     '<select id="r4TxGrp"></select><div id="r4TxGw"></div>' +
-    '<div class="row" style="font-size:12px"><span class="muted">Planilha nova:</span><input type="file" id="r4TxGwFile" accept=".xlsx,.xlsm,.xls,.xlsb"><button class="ghost" type="button" id="r4TxGwDef" title="voltar à planilha embutida">padrão</button></div></div>' +
+    '<label id="r4TxGwDrop" class="r4-drop sm"><input type="file" id="r4TxGwFile" accept=".xlsx,.xlsm,.xls,.xlsb" hidden><b>⬇ Arraste a planilha nova de core (MME/SGW)</b><span class="muted">ou clique</span></label>' +
+    '<div class="row" style="font-size:12px;margin-top:0"><button class="ghost" type="button" id="r4TxGwDef" title="voltar à planilha embutida">voltar à planilha padrão</button></div></div>' +
     '<div class="r4-box"><h3>b) ENG-SI — IPs da VIVO</h3>' +
     '<label id="r4TxDrop" class="r4-drop"><input type="file" id="r4TxEngFile" accept=".xlsx,.xlsm,.xls,.xlsb,.csv" hidden><span class="big">⬇ Arraste a ENG-SI aqui</span><span class="muted" style="font-size:12px">ou clique para escolher o arquivo</span></label>' +
     '<div id="r4TxEngSt" class="muted" style="font-size:12px"></div>' +
@@ -1187,7 +1190,7 @@
     '<div class="row"><button class="ghost" type="button" id="r4TxEngGo">Usar colado</button><button class="ghost" type="button" id="r4TxEngClr">Limpar colado</button></div></details>' +
     '<div id="r4TxVals"></div></div>' +
     '<div class="r4-box"><h3>c) Leitura TX do site</h3><div class="cmd-block"><pre id="r4TxCmds"></pre><button class="copy-btn" type="button" id="r4TxCmdsCopy">Copiar</button></div>' +
-    '<textarea id="r4TxRead" placeholder="Cole aqui as respostas (ou use Ler TX do MAE)"></textarea>' +
+    '<textarea id="r4TxRead" class="r4-dropta" placeholder="Cole aqui as respostas, arraste o .txt do log (ou use Ler TX do MAE)"></textarea>' +
     '<div class="row"><button class="primary" type="button" id="r4TxReadMae">▶ Ler TX do MAE</button><button class="ghost" type="button" id="r4TxReadGo">Processar colado</button>' +
     '<button class="ghost" type="button" id="r4TxReadClr">Limpar</button></div><div id="r4TxReadSt" class="muted" style="font-size:12.5px"></div></div>' +
     '</div>' +
@@ -1205,7 +1208,7 @@
     '<div class="r4-grid">' +
     '<section class="card"><h2><span class="n">1</span>Planilha MOU VIVO × TIM</h2>' +
     '<p class="muted" style="margin:0 0 6px">Arquivo <i>MOU_VIVO_TIM_4G - Base de Dados</i> (.xlsb). Fica guardado neste navegador — carregue de novo quando sair versão nova.</p>' +
-    '<div class="row"><input type="file" id="r4MouFile" accept=".xlsb,.xlsx,.xlsm"></div><div id="r4MouSt" class="muted" style="font-size:12.5px"></div></section>' +
+    '<label id="r4MouDrop" class="r4-drop"><input type="file" id="r4MouFile" accept=".xlsb,.xlsx,.xlsm" hidden><span class="big">⬇ Arraste a planilha MOU aqui</span><span class="muted" style="font-size:12px">ou clique para escolher o arquivo (.xlsb, .xlsx, .xlsm)</span></label><div id="r4MouSt" class="muted" style="font-size:12.5px"></div></section>' +
     '<section class="card"><h2><span class="n">2</span>Site</h2>' +
     '<div class="row"><input id="r4Site" list="r4SiteDl" placeholder="SR-XXXXXX" autocomplete="off" style="width:160px"><datalist id="r4SiteDl"></datalist><button class="ghost" type="button" id="r4Find">Buscar na planilha</button>' +
     '<button class="ghost" type="button" id="r4UseLoaded">Usar o site da Entrada</button><span id="r4SiteSt"></span></div>' +
@@ -1215,7 +1218,7 @@
     '<section class="card"><h2><span class="n">3</span>Leitura RS do site</h2>' +
     '<p class="muted" style="margin:0 0 6px">O botão <b>Ler do MAE</b> primeiro carrega o site completo na aba <b>Entrada</b> (Rodada 1 + Rodada 2: células, setores e RRUs) e depois roda os comandos ao lado, que completam o que o RS precisa. Também dá para colar a resposta.</p>' +
     '<div class="r4-two"><div class="cmd-block"><pre id="r4Cmds"></pre><button class="copy-btn" type="button" id="r4CmdsCopy">Copiar</button></div>' +
-    '<div><textarea id="r4Read" placeholder="Cole aqui as respostas dos comandos ao lado (ou use Ler do MAE)"></textarea>' +
+    '<div><textarea id="r4Read" class="r4-dropta" placeholder="Cole aqui as respostas dos comandos ao lado, arraste o .txt do log (ou use Ler do MAE)"></textarea>' +
     '<div class="row"><button class="primary" type="button" id="r4ReadMae">▶ Ler do MAE (Entrada + RS)</button><button class="ghost" type="button" id="r4ReadGo">Processar colado</button>' +
     '<button class="ghost" type="button" id="r4ReadClr">Limpar</button><span id="r4ReadSt" class="muted" style="font-size:12.5px"></span></div></div></div>' +
     '<div id="r4ReadSum"></div></section>' +
@@ -1536,6 +1539,30 @@
     else render();
   }
   $("r4TxEngFile").addEventListener("change", function () { readFile(this, engLoaded, "r4TxEngSt"); });
+  // arrastar arquivo: área → entrega ao <input type=file> e dispara o mesmo "change" do clique
+  function dropArea(el, fn) {
+    ["dragenter", "dragover"].forEach(function (t) { el.addEventListener(t, function (e) { e.preventDefault(); e.stopPropagation(); el.classList.add("over"); }); });
+    el.addEventListener("dragleave", function (e) { if (!el.contains(e.relatedTarget)) el.classList.remove("over"); });
+    el.addEventListener("drop", function (e) {
+      e.preventDefault(); e.stopPropagation(); el.classList.remove("over");
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) fn(f, e.dataTransfer.files);
+    });
+  }
+  function dropToInput(areaId, inputId) {
+    dropArea($(areaId), function (f, files) { var inp = $(inputId); try { inp.files = files; } catch (er) { return; } inp.dispatchEvent(new Event("change")); });
+  }
+  dropToInput("r4TxGwDrop", "r4TxGwFile");
+  dropToInput("r4MouDrop", "r4MouFile");
+  // caixas de resposta: arrastar o .txt do log preenche e já processa
+  [["r4TxRead", "r4TxReadGo", "r4TxReadSt"], ["r4Read", "r4ReadGo", "r4ReadSt"]].forEach(function (x) {
+    dropArea($(x[0]), function (f) {
+      if (/\.(xlsx?|xlsb|xlsm|zip|pdf|docx?)$/i.test(f.name)) { $(x[2]).innerHTML = chip("er", "arquivo") + " aqui vai o texto das respostas (.txt/.log) — " + esc(f.name); return; }
+      f.text().then(function (t) { $(x[0]).value = t; $(x[1]).click(); $(x[2]).insertAdjacentHTML("afterbegin", chip("ok", "lido") + " " + esc(f.name) + " · "); })
+        .catch(function (er) { $(x[2]).innerHTML = chip("er", "erro") + " " + esc(er.message); });
+    });
+  });
+  // arquivo solto fora das áreas: não deixa o navegador abrir o arquivo no lugar da ferramenta
+  ["dragover", "drop"].forEach(function (t) { pane.addEventListener(t, function (e) { if (e.dataTransfer && [].indexOf.call(e.dataTransfer.types || [], "Files") >= 0) e.preventDefault(); }); });
   var drop = $("r4TxDrop");
   ["dragenter", "dragover"].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
   ["dragleave", "drop"].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
