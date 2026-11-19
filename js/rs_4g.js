@@ -653,6 +653,16 @@
     return T;
   }
 
+  // só os PINGs com o core VIVO — quando o site já tem o S1/X2 e todas as rotas VIVO
+  function txPingOnlyOk(T) { return !!(T.hasRead && T.skip && T.skip.s1x2 && T.routes.length && T.routes.every(function (o) { return o.skip; }) && T.pings.length && ipOk(T.v.s1x2)); }
+  function txPingScript(T) {
+    var P = T.p, V = T.v, dv = { cn: P.cn, srn: P.srn }, L = [];
+    L.push("// SÓ PING com o core VIVO · " + T.site + " · gerado em " + now() + " · TELEBIT RAN",
+      "// Rotas VIVO já configuradas — origem S1/X2 VIVO " + V.s1x2 + " · um PING por vez", "");
+    T.pings.forEach(function (x) { L.push("// " + x.nm, "PING:" + loc(dv) + "SN=" + P.sn + ',SRCIP="' + V.s1x2 + '",DSTIP="' + x.ip + '",CONTPING=DISABLE,APPTIF=NO;'); });
+    return L.join("\n");
+  }
+
   function txScript(T) {
     var L = [], P = T.p, V = T.v, add = function () { for (var i = 0; i < arguments.length; i++) L.push(arguments[i]); };
     var hr = "// " + new Array(86).join("=");
@@ -1187,6 +1197,10 @@
     '<div class="row"><button class="primary" type="button" id="r4TxCopy">Copiar script TX</button><button class="ghost" type="button" id="r4TxDl">Baixar .txt</button>' +
     '<button class="ghost" type="button" id="r4TxRegen">↺ Regerar</button><span id="r4TxOutSt" class="muted" style="font-size:12.5px"></span></div>' +
     '<p class="muted" style="font-size:12.5px;margin:6px 0 0">No <b>Executar no site</b>: para no 1º comando de configuração que falhar; cada <code>PING</code> roda sozinho e só depois sai o próximo (OK/NOK aparece abaixo); o <code>MOD DEVIP</code> de USERLABEL pede confirmação antes.</p>' +
+    '<div id="r4TxPingOnly" class="r4-msg ok" style="margin-top:10px" hidden><b>Rotas da VIVO já configuradas no site</b> — dá para testar só os PINGs com o core VIVO, sem rodar a configuração de TX. ' +
+    '<span class="muted" style="font-size:12.5px">Um PING por vez, origem S1/X2 VIVO; o resultado aparece na tabela abaixo.</span>' +
+    '<div class="row" style="margin-top:6px"><span id="r4TxPingAnchor"></span><span id="r4TxPingOnlySt" class="muted" style="font-size:12.5px"></span></div>' +
+    '<textarea id="r4TxPingOut" hidden readonly></textarea></div>' +
     '<div id="r4TxPing" style="margin-top:10px"></div></section>' +
     '<div class="r4-grid">' +
     '<section class="card"><h2><span class="n">1</span>Planilha MOU VIVO × TIM</h2>' +
@@ -1468,6 +1482,10 @@
       '<div class="tw"><table class="r4t"><thead><tr><th>Destino</th><th>IP</th><th>Resultado</th><th>Detalhe</th><th>Quando</th></tr></thead><tbody>' +
       T.pings.map(function (x) { var r = T.res[x.ip]; return "<tr><td><b>" + esc(x.nm) + '</b></td><td class="mono">' + esc(x.ip) + "</td><td>" + (r ? chip(r.ok ? "ok" : "er", r.ok ? "OK" : "NOK") : chip("", "não testado")) + '</td><td style="font-size:12px">' + esc(r ? r.msg : "") + '</td><td style="font-size:12px">' + esc(r ? r.at : "") + "</td></tr>"; }).join("") +
       "</tbody></table></div>" + (Object.keys(T.res).length ? '<div class="row"><button class="ghost" type="button" id="r4TxPingClr">Limpar resultados de PING</button></div>' : "") : "";
+    var po = S.site && txPingOnlyOk(T);
+    $("r4TxPingOnly").hidden = !po;
+    $("r4TxPingOut").value = po ? txPingScript(T) : "";
+    $("r4TxPingOnlySt").textContent = po ? T.pings.length + " PING(s): " + T.pings.map(function (x) { return x.nm; }).join(", ") : "";
     if ($("r4TxPingClr")) $("r4TxPingClr").addEventListener("click", function () { lsSet(LS_TXPING + core(S.site), {}); render(); });
     // script
     var txt = S.site ? txScript(T) : "// Informe o site na seção 2 (ou carregue na Entrada).";
@@ -1717,7 +1735,7 @@
     },
     pingParse: pingParse,
     _t: { parseMou: parseMou, readAll: readAll, model: function () { return model(); }, script: function () { return script(model()); }, state: S,
-      tx: function () { return model().tx; }, txScript: function () { return txScript(model().tx); }, engCands: engCands, textRows: textRows, parseEngBook: parseEngBook, gwFind: gwFind, parseGwBook: parseGwBook,
+      tx: function () { return model().tx; }, txScript: function () { return txScript(model().tx); }, txPingScript: function () { var T = model().tx; return txPingOnlyOk(T) ? txPingScript(T) : ""; }, engCands: engCands, textRows: textRows, parseEngBook: parseEngBook, gwFind: gwFind, parseGwBook: parseGwBook,
       setEng: function (e) { ENG = e; render(); } }
   };
 

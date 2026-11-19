@@ -20,7 +20,8 @@
     { id: "pwRb",     after: "pwCopyRb",   name: "Potência · rollback", label: "▶ Executar rollback" },
     { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true },
     { id: "rs4Out",   after: "rs4Copy",    name: "RS_4G · script", guard: true, askOnFail: true, site: rs4Site },
-    { id: "r4TxOut",  after: "r4TxCopy",   name: "RS_4G · TX VIVO", guard: "tx", askOnFail: true, site: rs4Site }
+    { id: "r4TxOut",  after: "r4TxCopy",   name: "RS_4G · TX VIVO", guard: "tx", askOnFail: true, site: rs4Site },
+    { id: "r4TxPingOut", after: "r4TxPingAnchor", name: "RS_4G · só PING VIVO", guard: "tx", askOnFail: true, site: rs4Site, label: "▶ Testar só os PINGs com o core VIVO" }
   ];
   var BATCH = 5;
   var MML_RE = /^(?:[A-Z][A-Z0-9]*\s+[A-Z0-9_]+|PING)\s*:.*;$/i;       // PING não tem objeto ("PING:SN=...;")
