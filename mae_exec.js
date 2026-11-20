@@ -16,6 +16,8 @@
     { id: "clOut",    after: "clCopy",     name: "Inter-Freq · 5 Clonar / Redeclarar" },
     { id: "ir43Out",  after: "ir43Copy",   name: "Inter-Freq · 6 UTRANNFREQ (BTS)" },
     { id: "modCmds",  after: "copyMod",    name: "Conexão física · comandos" },
+    { id: "retCmds",  after: "retCopy",    name: "Conexão física · RET", guard: "ret", askOnFail: true },
+    { id: "retPortCmds", after: "retPortCopy", name: "Conexão física · porta RET", askOnFail: true },
     { id: "pwScript", after: "pwCopy",     name: "Potência · script" },
     { id: "pwRb",     after: "pwCopyRb",   name: "Potência · rollback", label: "▶ Executar rollback" },
     { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true },
@@ -200,7 +202,31 @@
   function isGuard(it) {
     if (!field || !field.guard) return false;
     if (field.guard === "tx") return isPing(it) || isLabel(it) || /^CFM\s+CB\s*:/i.test(it.cmd);
+    if (field.guard === "ret") return isRetWait(it);
     return /^(CFM\s+CB|DSP\s+APP)\s*:/i.test(it.cmd);
+  }
+  function isRetWait(it) { return /^DSP\s+(RET|RETSUBUNIT)\s*:/i.test(it.cmd); }
+  // RET: repete o DSP RET / DSP RETSUBUNIT até todos os RET cadastrados neste script responderem (js/ret_ald.js decide)
+  async function guardRet(it) {
+    var adds = items.filter(function (x) { return /^ADD\s+RET\s*:/i.test(x.cmd); });
+    var exp = adds.filter(function (x) { return x.st === "ok" || x.st === "rt"; }).map(function (x) {
+      return { no: (/DEVICENO\s*=\s*(\d+)/i.exec(x.cmd) || [])[1], serial: (/SERIALNO\s*=\s*"([^"]*)"/i.exec(x.cmd) || [])[1] || "" };
+    }).filter(function (e) { return e.no; });
+    if (adds.length && !exp.length) { it.st = "pd"; it.msg = "pulado: nenhum ADD RET deu certo"; setRow(it); return true; }
+    for (var n = 1; ; n++) {
+      var x = await runOne(it.cmd);
+      it.resp += (it.resp ? "\n----- consulta " + n + " -----\n" : "") + (x.resp || "");
+      var r = window.RETALD ? window.RETALD.check(it.cmd, x.resp || "", exp) : { done: x.ok, msg: x.ok ? "" : retMsg(x.resp) };
+      if (r.done) { it.st = r.warn ? "er" : "ok"; it.msg = r.msg + (n > 1 ? " (" + n + "ª consulta)" : ""); setRow(it); return true; }
+      it.st = "run"; it.msg = r.msg + " · consulta " + n + " · nova consulta em 8 s…"; setRow(it);
+      if (n % 15 === 0 && !confirm("Os RET ainda não ficaram prontos em " + ne + " após " + n + " consultas (~" + Math.round(n * 8 / 60) + " min).\n" + r.msg + "\n\nOK = continuar esperando\nCancelar = decidir o que fazer")) {
+        var go = confirm("Seguir com os próximos comandos mesmo assim?\n\nOK = seguir (o Sector ID pode falhar nos RET que não conectaram)\nCancelar = parar a execução aqui");
+        it.st = "er"; it.msg = r.msg + " · não ficou pronto"; setRow(it);
+        if (!go) stopMsg = "Parado: os RET não ficaram prontos (" + r.msg + ").";
+        return go;
+      }
+      if (!(await sleep(8000))) { it.st = "pd"; it.msg = ""; setRow(it); return false; }
+    }
   }
   function pingParse(resp) {
     if (window.RS4G && window.RS4G.pingParse) return window.RS4G.pingParse(resp);
@@ -356,7 +382,7 @@
       if (phase === 1 && isGuard(list[i])) {
         var g = list[i]; g.st = "run"; setRow(g);
         var tg = $("mxr" + g.idx); if (tg && !$("mxOnlyFail").checked) tg.scrollIntoView({ block: "nearest" });
-        var go = isPing(g) && field.guard === "tx" ? await guardPing(g) : isLabel(g) && field.guard === "tx" ? await guardLabel(g) : /^CFM/i.test(g.cmd) ? await guardCfm(g) : await guardApp(g);
+        var go = field.guard === "ret" ? await guardRet(g) : isPing(g) && field.guard === "tx" ? await guardPing(g) : isLabel(g) && field.guard === "tx" ? await guardLabel(g) : /^CFM/i.test(g.cmd) ? await guardCfm(g) : await guardApp(g);
         i++; stats(phase, i, list.length);
         if (!go) { if (g.st !== "ok" && g.st !== "rt" && stopAt == null) stopAt = g.idx; abort = true; return false; }
         continue;
@@ -420,6 +446,10 @@
     } catch (e) { err = e; }
     await window.MAE.api("/unreg", {}).catch(function () {});
     running = false; window.MAE.setBusy(false);
+    try {
+      window.dispatchEvent(new CustomEvent("mae:done", { detail: { id: field.id, ne: ne, ok: !err && !stopMsg && !abort,
+        items: items.map(function (it) { return { cmd: it.cmd, st: it.st, msg: it.msg, resp: it.resp }; }) } }));
+    } catch (e) {}
     var c = count(), secs = Math.round((Date.now() - t0) / 1000);
     if (!ov) { window.MAE.log(field.name + " em " + ne + ": janela fechada · " + c.ok + " ok" + ((c.er + c.er2) ? ", " + (c.er + c.er2) + " falha(s)" : ""), (c.er + c.er2) || err ? "er" : "in"); mini(); return; }
     $("mxStop").disabled = true; $("mxStop").textContent = "Parar";
