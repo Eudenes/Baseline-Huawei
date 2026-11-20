@@ -103,6 +103,24 @@
     }).filter(function (r) { return /^\d+$/.test(r.no); });
   }
 
+  // LST/DSP RETPORT: os nomes das colunas variam com a versão — guarda tudo, juntando por CN-SRN-SN
+  function parsePort(text) {
+    return records(text, ["Cabinet No."]).map(function (r) {
+      var cn = g(r, /^(Control Port )?Cabinet No/i), srn = g(r, /^(Control Port )?Subrack No/i), sn = g(r, /^(Control Port )?Slot No/i), o = {};
+      Object.keys(r).forEach(function (k) { if (!/Cabinet No|Subrack No|Slot No/i.test(k)) o[k] = nv(r[k]); });
+      return { k: [cn, srn, sn].join("-"), cn: cn, srn: srn, sn: sn, f: o };
+    }).filter(function (p) { return /^\d+$/.test(p.srn); });
+  }
+  // bloco de resposta de um comando dentro do texto da Rodada 1 ("%%/*n*/LST RET:;%%" até o próximo eco "%%…%%")
+  function block(t, re) {
+    var m = re.exec(t); if (!m) return null;
+    var rest = t.slice(m.index + m[0].length), e = rest.search(/%%(?:\/\*\d+\*\/)?[A-Z]{2,}\s+[A-Z0-9_]+\s*:[^%\r\n]*%%/);
+    return e < 0 ? rest : rest.slice(0, e);
+  }
+  var B_LST = /%%(?:\/\*\d+\*\/)?\s*LST\s+RET\s*:[^%]*%%/i, B_DSP = /%%(?:\/\*\d+\*\/)?\s*DSP\s+RET\s*:[^%]*%%/i, B_SUB = /%%(?:\/\*\d+\*\/)?\s*DSP\s+RETSUBUNIT\s*:[^%]*%%/i,
+    B_LPORT = /%%(?:\/\*\d+\*\/)?\s*LST\s+RETPORT\s*:[^%]*%%/i, B_DPORT = /%%(?:\/\*\d+\*\/)?\s*DSP\s+RETPORT\s*:[^%]*%%/i;
+  function powerOn(p) { var v = p ? g(p.f, /Power Switch|PWRSWITCH|Power Supply Switch/i) : ""; return /^(ON|OPEN|ENABLE)$/i.test(v) ? true : /^(OFF|CLOSE|DISABLE)$/i.test(v) ? false : null; }
+
   // Usado pelo executor (mae_exec.js) nos DSP RET / DSP RETSUBUNIT do script:
   // done = todos os RET esperados prontos. exp = [{no, serial}] dos ADD RET do script (vazio = todos da resposta).
   function check(cmd, resp, exp) {
@@ -134,9 +152,9 @@
   var G = Object.assign({}, DEF, lsGet(LS_G, {}));
   if (G.nameTpl === "{BANDA}_SEC{SEC2}_{PORTA}") G.nameTpl = DEF.nameTpl;     // preferências gerais (modelos, limiares…)
   var S = null;                                         // estado do site atual
-  function blank(site) { return { site: site, scan: null, scanTs: "", existing: null, sec: {}, band: {}, ov: {}, bsid: "", start: "", portSel: {}, status: null }; }
+  function blank(site) { return { site: site, scan: null, scanTs: "", existing: null, sec: {}, band: {}, ov: {}, bsid: "", start: "", portSel: {}, status: null, ports: null }; }
   function load(site) { S = Object.assign(blank(site), lsGet(LS + site, {})); S.site = site; }
-  function save() { if (S && S.site) lsSet(LS + S.site, { scan: S.scan, scanTs: S.scanTs, existing: S.existing, sec: S.sec, band: S.band, ov: S.ov, bsid: S.bsid, start: S.start, portSel: S.portSel, status: S.status }); lsSet(LS_G, G); }
+  function save() { if (S && S.site) lsSet(LS + S.site, { scan: S.scan, scanTs: S.scanTs, existing: S.existing, sec: S.sec, band: S.band, ov: S.ov, bsid: S.bsid, start: S.start, portSel: S.portSel, status: S.status, ports: S.ports }); lsSet(LS_G, G); }
 
   function siteModel() { try { return (window.PL_TOOL && window.PL_TOOL.rsModel && window.PL_TOOL.rsModel()) || null; } catch (e) { return null; } }
   function siteBands() {
@@ -267,6 +285,7 @@
       return p;
     }
     siteRrus().forEach(function (u) { add(String(u.cab), String(u.srn), String(u.slot), { name: u.name || "", type: u.type || "" }); });
+    (S && S.ports && S.ports.list || []).forEach(function (q) { add(q.cn, q.srn, q.sn); });
     (S && S.scan || []).forEach(function (r) {
       var p = add(r.cn, r.srn, r.sn);
       if (isRet(r)) p.rets++;
@@ -275,7 +294,7 @@
     return out.sort(function (a, b) { return (+a.cn - +b.cn) || (+a.srn - +b.srn) || (+a.sn - +b.sn); });
   }
   function portScript(P) {
-    var sel = P.filter(function (p) { return S.portSel[p.k] !== false; });
+    var inf = portInfo(), sel = P.filter(function (p) { return portSelected(p, inf); });
     if (!sel.length) return "";
     var thr = G.thr ? ",THRESHOLDTYPE=UER_SELF_DEFINE,UOTHD=" + G.uo + ",UCTHD=" + G.uc + ",OOTHD=" + G.oo + ",OCTHD=" + G.oc : "";
     var L = ["// Porta RET — " + S.site + " · alimentação" + (G.thr ? " + limiares de corrente personalizados" : "") + " · " + sel.length + " porta(s)"];
@@ -314,6 +333,7 @@
     "#retSec .ret-msg{margin-top:8px;border-radius:6px;padding:8px 10px;font-size:12.5px}",
     "#retSec .ret-msg.warn{background:var(--warning-bg);color:var(--warning)}#retSec .ret-msg.er{background:#fdecec;color:#7a0007}#retSec .ret-msg.ok{background:var(--success-bg);color:var(--success)}",
     "#retSec pre.ret-pre{margin:8px 0 0;background:var(--mono-bg);border:1px solid var(--mono-border);color:var(--mono-text);font:12.5px/1.4 var(--mono);border-radius:6px;padding:10px 12px;max-height:280px;overflow:auto;white-space:pre}",
+    "#retSec pre.ret-pre:empty{display:none}",
     "#retSec details.ret-paste summary{cursor:pointer;color:var(--text-muted);font-size:12.5px;margin-top:8px}",
     "#retSec details.ret-paste textarea{min-height:110px;margin-top:6px}",
     "#retSec .ret-cfg{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px 14px;margin-top:6px}",
@@ -321,6 +341,8 @@
     "#retSec .ret-grp{display:flex;gap:6px 14px;flex-wrap:wrap;margin-top:6px;align-items:center}",
     "#retSec .ret-grp span.l{color:var(--text-muted);font-size:12px;min-width:120px}",
     "#retSec .ret-grp label{display:flex;gap:5px;align-items:center;font:12.5px var(--mono)}",
+    "#retSec .ret-sub{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0 4px}#retSec .ret-sub .sp{flex:1}",
+    "#retSec details.ret-det summary{cursor:pointer;color:var(--text-muted);font-size:12px}#retSec details.ret-det pre{margin:4px 0 0;font:11.5px/1.35 var(--mono);white-space:pre-wrap;color:var(--text-muted)}",
     "#retSec .ret-grp input[type=text]{width:90px}#retSec .ret-grp input[type=number]{width:58px}"
   ].join("\n");
   document.head.appendChild(st);
@@ -333,6 +355,8 @@
     'Se uma porta não achar RET, use o passo <b>4</b> (alimentação da porta RET) — ele varre de novo sozinho no fim. Os scripts rodam pelo <b>▶ Executar no site</b> (conexão do painel <i>Executar no MAE</i> da aba Entrada).</p>' +
 
     '<div class="ret-step"><h3><span class="n">1</span>Varredura dos RET <span class="sp"></span><span id="retScanTs" class="muted" style="font-weight:400;font-size:12.5px"></span></h3>' +
+      '<div class="ret-sub"><b>Portas RET</b> <span id="retPortTs" class="muted" style="font-size:12px"></span><span class="sp"></span><button class="ghost" type="button" id="retRead" title="LST RET · DSP RET · DSP RETSUBUNIT · LST RETPORT · DSP RETPORT (os mesmos da Rodada 1)">↻ Ler RET e portas agora</button></div>' +
+      '<div id="retPortView"></div>' +
       '<div class="ret-row"><button class="primary" type="button" id="retScan">▶ Varrer RET no site (SCN ALD)</button><button class="ghost" type="button" id="retScanStop" hidden>Parar de aguardar</button>' +
         '<div class="ret-bar" id="retBar" hidden><i></i><b>0%</b></div></div>' +
       '<div id="retScanMsg"></div>' +
@@ -346,7 +370,7 @@
       '<div class="ret-row"><button class="ghost" type="button" id="retCopy">Copiar script</button></div>' +
       '<div id="retWarn"></div></div>' +
 
-    '<div class="ret-step"><h3><span class="n">3</span>Conferência <span class="sp"></span><button class="ghost" type="button" id="retCheck">Conferir agora (DSP RET + DSP RETSUBUNIT)</button></h3><div id="retStatus"><p class="muted">Aparece sozinho depois do ▶ Executar do passo 2 (ou clique em Conferir agora).</p></div></div>' +
+    '<div class="ret-step"><h3><span class="n">3</span>Conferência <span class="sp"></span><button class="ghost" type="button" id="retCheck">↻ Conferir agora</button></h3><div id="retStatus"><p class="muted">Preenchido pela Rodada 1 da Entrada (DSP RET / DSP RETSUBUNIT), no fim do ▶ Executar do passo 2 ou em ↻ Conferir agora.</p></div></div>' +
 
     '<div class="ret-step"><h3><span class="n">4</span>Porta RET — alimentação e limiares <span class="muted" style="font-weight:400;font-size:12.5px">(quando a varredura não acha RET numa RRU)</span></h3>' +
       '<div class="ret-row"><label><input type="checkbox" id="retThr"> Limiares de corrente personalizados (<span class="mono">THRESHOLDTYPE=UER_SELF_DEFINE</span>)</label>' +
@@ -364,7 +388,7 @@
     if (!S || S.site !== site) load(site);
     $("retSite").textContent = site || "nenhum site carregado";
     $("retScanTs").textContent = S.scanTs ? "última varredura: " + S.scanTs : "";
-    renderScan(); renderCad(); renderStatus(); renderPorts();
+    renderPortView(); renderScan(); renderCad(); renderStatus(); renderPorts();
   }
   function renderScan() {
     if (!S.scan) { $("retScanTbl").innerHTML = ""; return; }
@@ -436,7 +460,7 @@
   }
   function renderStatus() {
     var s = S.status;
-    if (!s) { $("retStatus").innerHTML = '<p class="muted">Aparece sozinho depois do ▶ Executar do passo 2 (ou clique em Conferir agora).</p>'; return; }
+    if (!s) { $("retStatus").innerHTML = '<p class="muted">Preenchido pela Rodada 1 da Entrada (DSP RET / DSP RETSUBUNIT), no fim do ▶ Executar do passo 2 ou em ↻ Conferir agora.</p>'; return; }
     var subs = s.sub || [], rets = s.ret || [], nos = [];
     rets.concat(subs).forEach(function (r) { if (nos.indexOf(r.no) < 0) nos.push(r.no); });
     nos.sort(function (a, b) { return +a - +b; });
@@ -456,16 +480,42 @@
       (nOk < lines.length ? " · RET recém-cadastrado leva alguns segundos (SYSTEM_BUSY / ALD_DISCONNECTED); confira de novo." : "") + '</div>' +
       '<div class="ret-tw"><table><thead><tr><th>Nº</th><th>Nome</th><th>Serial lido</th><th>Porta</th><th>Subunid.</th><th>Online</th><th>Tilt</th><th>Sector ID lido</th><th>Falha</th><th></th></tr></thead><tbody>' + lines.join("") + '</tbody></table></div>';
   }
+  function portInfo() { var m = {}; (S.ports && S.ports.list || []).forEach(function (p) { m[p.k] = p; }); return m; }
+  function renderPortView() {
+    var P = S.ports;
+    $("retPortTs").textContent = P ? "· lido em " + P.ts + (P.src ? " (" + P.src + ")" : "") : "";
+    if (!P || !P.list.length) {
+      $("retPortView").innerHTML = '<p class="muted" style="margin:2px 0 6px">' + (P ? "O site não devolveu porta RET." : "Sem leitura das portas RET: rode a Rodada 1 na aba Entrada (já inclui LST/DSP RETPORT) ou clique em ↻ Ler RET e portas agora.") + '</p>';
+      return;
+    }
+    var rr = {}; siteRrus().forEach(function (u) { rr[portKey(u.cab, u.srn, u.slot)] = u; });
+    var pick = function (f, re, not) { for (var k in f) if (re.test(k) && !(not && not.test(k)) && f[k]) return f[k]; return ""; };
+    var on = P.list.filter(function (p) { return powerOn(p) === true; }).length, rets = {};
+    (S.status && S.status.ret || []).forEach(function (r) { var k = portKey(r.cn, r.srn, r.sn); rets[k] = (rets[k] || 0) + 1; });
+    $("retPortView").innerHTML = '<div class="ret-msg ' + (on ? "ok" : "warn") + '" style="margin-top:2px">' + on + " de " + P.list.length + " porta(s) RET com alimentação ligada" +
+      (on < P.list.length ? " · porta desligada não acha RET na varredura — ligue no passo 4" : "") + '</div>' +
+      '<div class="ret-tw" style="max-height:240px"><table><thead><tr><th>Porta (CN-SRN-SN)</th><th>RRU</th><th>Alimentação</th><th>Estado</th><th>Corrente / tensão</th><th>Limiar</th><th>RET cadastrados</th><th>Tudo que o site devolveu</th></tr></thead><tbody>' +
+      P.list.map(function (p) {
+        var u = rr[p.k] || {}, pw = powerOn(p), f = p.f;
+        var stt = pick(f, /status|state/i, /power|switch/i), cur = [pick(f, /current/i, /threshold|occur|clear/i), pick(f, /voltage/i, /threshold/i)].filter(Boolean).join(" · ");
+        return '<tr class="' + (pw === false ? "bad" : "") + '"><td class="m">' + esc(p.k) + '</td><td>' + esc(u.name || "") + '</td>' +
+          '<td>' + (pw === null ? "" : '<span class="chip ' + (pw ? "ok" : "er") + '">' + (pw ? "ON · ativa" : "OFF") + '</span>') + '</td><td>' + esc(stt) + '</td><td class="m">' + esc(cur) + '</td>' +
+          '<td>' + esc(pick(f, /threshold type/i)) + '</td><td>' + (rets[p.k] ? '<span class="chip ok">' + rets[p.k] + '</span>' : "") + '</td>' +
+          '<td><details class="ret-det"><summary>ver</summary><pre>' + esc(Object.keys(f).map(function (k) { return k + " = " + (f[k] || "NULL"); }).join("\n")) + '</pre></details></td></tr>';
+      }).join("") + '</tbody></table></div>';
+  }
+  function portSelected(p, info) { if (S.portSel[p.k] != null) return S.portSel[p.k] !== false; var i = (info || portInfo())[p.k]; return powerOn(i) !== true; }
   function renderPorts() {
     $("retThr").checked = !!G.thr; $("retAuto").checked = !!G.autoscan;
     $("retUo").value = G.uo; $("retUc").value = G.uc; $("retOo").value = G.oo; $("retOc").value = G.oc; $("retWait").value = G.wait;
     ["retUo", "retUc", "retOo", "retOc"].forEach(function (i) { $(i).disabled = !G.thr; });
     var P = portList();
     if (!P.length) { $("retPorts").innerHTML = '<p class="muted">Carregue o site na aba Entrada (LST RRU) ou faça a varredura para listar as portas.</p>'; $("retPortCmds").textContent = ""; return; }
-    $("retPorts").innerHTML = '<div class="ret-tw" style="max-height:260px"><table><thead><tr><th></th><th>Porta (CN-SRN-SN)</th><th>RRU</th><th>Tipo</th><th>Última varredura</th></tr></thead><tbody>' +
+    var inf = portInfo();
+    $("retPorts").innerHTML = '<div class="ret-tw" style="max-height:260px"><table><thead><tr><th></th><th>Porta (CN-SRN-SN)</th><th>RRU</th><th>Tipo</th><th>Alimentação</th><th>Última varredura</th></tr></thead><tbody>' +
       P.map(function (p) {
-        var on = S.portSel[p.k] !== false;
-        return '<tr class="' + (on ? "" : "off") + '"><td><input type="checkbox" data-port="' + esc(p.k) + '"' + (on ? " checked" : "") + '></td><td class="m">' + esc(p.k) + '</td><td>' + esc(p.name) + '</td><td>' + esc(p.type) + '</td>' +
+        var on = portSelected(p, inf), pw = powerOn(inf[p.k]);
+        return '<tr class="' + (on ? "" : "off") + '"><td><input type="checkbox" data-port="' + esc(p.k) + '"' + (on ? " checked" : "") + '></td><td class="m">' + esc(p.k) + '</td><td>' + esc(p.name) + '</td><td>' + esc(p.type) + '</td><td>' + (pw === null ? "" : '<span class="chip ' + (pw ? "ok" : "er") + '">' + (pw ? "ON" : "OFF") + '</span>') + '</td>' +
           '<td>' + (!S.scan ? "" : p.fail ? '<span class="chip er">' + esc(p.fail) + '</span>' : p.rets ? '<span class="chip ok">' + p.rets + ' RET</span>' : '<span class="chip wt">nenhum RET</span>') + '</td></tr>';
       }).join("") + '</tbody></table></div>';
     $("retPortCmds").textContent = portScript(P);
@@ -580,19 +630,46 @@
     S.status = { ts: now(), ret: parseDspRet(retResp || ""), sub: parseDspSub(subResp || "") };
     save(); renderStatus();
   }
-  $("retCheck").onclick = async function () {
+  // respostas de LST RET / DSP RET / DSP RETSUBUNIT / LST RETPORT / DSP RETPORT (Rodada 1 da Entrada, leitura avulsa ou fim de um ▶ Executar)
+  function apply(t, src) {
+    t = String(t || "").replace(/<br\s*\/?>/gi, "\n").replace(/\r/g, "");
+    var lst = block(t, B_LST), dsp = block(t, B_DSP), sub = block(t, B_SUB), lp = block(t, B_LPORT), dp = block(t, B_DPORT), n = 0;
+    if (lst != null && /RETCODE\s*=\s*0\b/.test(lst)) { S.existing = parseLstRet(lst); n++; }
+    if (dsp != null || sub != null) { S.status = { ts: now(), src: src, ret: parseDspRet(dsp || ""), sub: parseDspSub(sub || "") }; n++; }
+    if (lp != null || dp != null) {
+      var m = {}, list = [];
+      parsePort(lp || "").concat(parsePort(dp || "")).forEach(function (p) {
+        var q = m[p.k]; if (!q) { q = m[p.k] = { k: p.k, cn: p.cn, srn: p.srn, sn: p.sn, f: {} }; list.push(q); }
+        Object.keys(p.f).forEach(function (k) { if (p.f[k] || q.f[k] == null) q.f[k] = p.f[k]; });
+      });
+      S.ports = { ts: now(), src: src, list: list.sort(function (a, b) { return (+a.cn - +b.cn) || (+a.srn - +b.srn) || (+a.sn - +b.sn); }) }; n++;
+    }
+    return n;
+  }
+  // chamado pela aba Entrada ao processar a Rodada 1
+  function setText(t, ne) {
+    var site = String(ne || loadedSite()).split("·")[0].trim(); if (!site) return;
+    if (!S || S.site !== site) load(site);
+    if (apply(t, "Rodada 1")) save();
     render();
-    if (!canRun("conferir os RET")) return;
+  }
+  async function readNow(btn) {
+    render();
+    if (!canRun("ler os RET")) return;
     if (window.MAE.state().busy) { alert("O MAE está ocupado com outra execução. Aguarde terminar."); return; }
-    var btn = this; btn.disabled = true; btn.textContent = "Lendo…";
-    window.MAE.setBusy(true, "a conferência de RET (Conexão física)");
+    var old = btn.textContent; btn.disabled = true; btn.textContent = "Lendo…";
+    window.MAE.setBusy(true, "a leitura de RET (Conexão física)");
     try {
-      var r = await window.MAE.api("/run", { ne: S.site, cmds: ["DSP RET:;", "DSP RETSUBUNIT:;"] });
+      var cmds = ["LST RET:;", "DSP RET:;", "DSP RETSUBUNIT:;", "LST RETPORT:;", "DSP RETPORT:;"];
+      var r = await window.MAE.api("/run", { ne: S.site, cmds: cmds });
       if (r[0] && /^REG NE/.test(r[0].cmd)) { if (!r[0].ok) throw new Error("REG NE falhou para " + S.site); r = r.slice(1); }
-      statusFrom((r[0] || {}).resp, (r[1] || {}).resp);
-    } catch (e) { $("retStatus").innerHTML = '<div class="ret-msg er">✖ ' + esc(e.message) + '</div>'; }
-    finally { await window.MAE.api("/unreg", {}).catch(function () {}); window.MAE.setBusy(false); btn.disabled = false; btn.textContent = "Conferir agora (DSP RET + DSP RETSUBUNIT)"; }
-  };
+      apply(r.map(function (x, i) { return "%%" + cmds[i] + "%%\n" + String(x.resp || "").replace(/%%[^%\r\n]*%%/g, ""); }).join("\n"), "leitura avulsa");
+      save(); render();
+    } catch (e) { msg("retScanMsg", "er", "✖ " + esc(e.message)); }
+    finally { await window.MAE.api("/unreg", {}).catch(function () {}); window.MAE.setBusy(false); btn.disabled = false; btn.textContent = old; }
+  }
+  $("retCheck").onclick = function () { readNow(this); };
+  $("retRead").onclick = function () { readNow(this); };
 
   // fim de um ▶ Executar (mae_exec.js)
   window.addEventListener("mae:done", function (ev) {
@@ -604,6 +681,10 @@
       if (a || b) statusFrom(a, b);
       if (d.ok && S.scan) { S.scan.forEach(function (r) { if (isRet(r) && (d.items || []).some(function (it) { return (it.st === "ok" || it.st === "rt") && it.cmd.indexOf('SERIALNO="' + r.serial + '"') > 0; })) r.cfg = "CONFIGURED"; }); save(); }
       render();
+    }
+    if (d.id === "retPortCmds") {
+      var lp = last(/^LST\s+RETPORT\s*:/i), dp = last(/^DSP\s+RETPORT\s*:/i);
+      if (lp || dp) { apply("%%LST RETPORT:;%%\n" + lp.replace(/%%[^%\r\n]*%%/g, "") + "\n%%DSP RETPORT:;%%\n" + dp.replace(/%%[^%\r\n]*%%/g, ""), "após o passo 4"); save(); renderPortView(); renderPorts(); }
     }
     if (d.id === "retPortCmds" && d.ok && G.autoscan) {
       var n = G.wait;
@@ -620,5 +701,5 @@
   if ($("neLbl") && window.MutationObserver) new MutationObserver(function () { setTimeout(render, 150); }).observe($("neLbl"), { childList: true, characterData: true, subtree: true });
   render();
 
-  window.RETALD = { check: check, render: render, _t: { parseScan: parseScan, parseLstRet: parseLstRet, parseDspRet: parseDspRet, parseDspSub: parseDspSub, splitSerial: splitSerial, model: model, retScript: retScript, portScript: portScript, portList: portList, state: function () { return S; }, G: G } };
+  window.RETALD = { check: check, render: render, setText: setText, _t: { parsePort: parsePort, apply: apply, parseScan: parseScan, parseLstRet: parseLstRet, parseDspRet: parseDspRet, parseDspSub: parseDspSub, splitSerial: splitSerial, model: model, retScript: retScript, portScript: portScript, portList: portList, state: function () { return S; }, G: G } };
 })();

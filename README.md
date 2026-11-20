@@ -75,6 +75,10 @@ python mml_helper_v2.py --port 8765               # outra porta local
 
 Caixa **RET — antenas AISG** no fim da aba (`js/ret_ald.js`), na ordem do roteiro de campo:
 
+A Rodada 1 da aba Entrada inclui `LST RET`, `DSP RET`, `DSP RETSUBUNIT`, `LST RETPORT` e `DSP RETPORT`: ao processar,
+a caixa já mostra as **portas RET** (alimentação ON/OFF, estado, corrente, limiar) no passo 1, os RET cadastrados e a
+conferência (passo 3). O botão **↻ Ler RET e portas agora** relê só esses 5 comandos. O `SCN ALD` (demorado) só roda no botão.
+
 1. **Varredura** — `SCN ALD:;` como tarefa no helper (v3.4+): mostra o %, só termina no `Status = Success`
    e lê o `LST RET:;` para saber o que já está cadastrado. Sem helper, dá para colar a resposta.
 2. **Cadastro e Sector ID** — um `ADD RET` por RET achado (porta de controle, tipo, fabricante e serial da varredura).
