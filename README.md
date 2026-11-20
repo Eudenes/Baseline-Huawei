@@ -71,6 +71,23 @@ python mml_helper_v2.py --mae 10.220.30.9:31114   # outro MAE
 python mml_helper_v2.py --port 8765               # outra porta local
 ```
 
+## RET (aba Conexão física)
+
+Caixa **RET — antenas AISG** no fim da aba (`js/ret_ald.js`), na ordem do roteiro de campo:
+
+1. **Varredura** — `SCN ALD:;` como tarefa no helper (v3.4+): mostra o %, só termina no `Status = Success`
+   e lê o `LST RET:;` para saber o que já está cadastrado. Sem helper, dá para colar a resposta.
+2. **Cadastro e Sector ID** — um `ADD RET` por RET achado (porta de controle, tipo, fabricante e serial da varredura).
+   Serial `06CB26410005XA-R1` → antena `CB26410005XA` (vira SEC01, SEC02… na ordem; editável) e porta `R1`.
+   Banda por porta da antena (ex.: Y1 = L1800). Nome `{BANDA}_SEC{SEC2}_{PORTA} ` (igual ao comando de campo: sem banda `"_SEC01_R1 "`, com banda `"L1800_SEC01_Y1 "`) e Sector ID
+   `S{SEC}-{PORTA}-{BANDA}-{OP}` (modelos editáveis; tudo editável na linha). Numeração por setor, sem repetir os já cadastrados.
+   No **▶ Executar no site**, o `DSP RET` e o `DSP RETSUBUNIT` depois dos ADD repetem sozinhos a cada 8 s até todos os RET
+   do script terem serial lido e subunidade `AVAILABLE` com tilt (sem `ALD_DISCONNECTED` / `SYSTEM_BUSY`); só então
+   entra o `MOD RETDEVICEDATA` (BSID = site).
+3. **Conferência** — tabela do `DSP RET` + `DSP RETSUBUNIT` (serial, online, tilt em graus, Sector ID).
+4. **Porta RET** — `MOD RETPORT ... PWRSWITCH=ON` (opcional `THRESHOLDTYPE=UER_SELF_DEFINE` com UOTHD/UCTHD/OOTHD/OCTHD),
+   `LST/DSP RETPORT`, espera N s e varre de novo sozinho.
+
 ## RS_4G — etapa 0: TX VIVO (configurar e testar)
 
 Antes do RAN Sharing, a seção **0** da aba RS_4G monta e testa a transmissão da VIVO
