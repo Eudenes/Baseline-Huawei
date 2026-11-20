@@ -79,7 +79,7 @@ Caixa **RET — antenas AISG** no fim da aba (`js/ret_ald.js`), na ordem do rote
    e lê o `LST RET:;` para saber o que já está cadastrado. Sem helper, dá para colar a resposta.
 2. **Cadastro e Sector ID** — um `ADD RET` por RET achado (porta de controle, tipo, fabricante e serial da varredura).
    Serial `06CB26410005XA-R1` → antena `CB26410005XA` (vira SEC01, SEC02… na ordem; editável) e porta `R1`.
-   Banda por porta da antena (ex.: Y1 = L1800). Nome `{BANDA}_SEC{SEC2}_{PORTA}` e Sector ID
+   Banda por porta da antena (ex.: Y1 = L1800). Nome `{BANDA}_SEC{SEC2}_{PORTA} ` (igual ao comando de campo: sem banda `"_SEC01_R1 "`, com banda `"L1800_SEC01_Y1 "`) e Sector ID
    `S{SEC}-{PORTA}-{BANDA}-{OP}` (modelos editáveis; tudo editável na linha). Numeração por setor, sem repetir os já cadastrados.
    No **▶ Executar no site**, o `DSP RET` e o `DSP RETSUBUNIT` depois dos ADD repetem sozinhos a cada 8 s até todos os RET
    do script terem serial lido e subunidade `AVAILABLE` com tilt (sem `ALD_DISCONNECTED` / `SYSTEM_BUSY`); só então

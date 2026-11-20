@@ -17,7 +17,7 @@
 
   var LS = "retald.v1.", LS_G = "retald.v1";
   var MINV = 3.4;                                          // tarefas (/job) no helper
-  var DEF = { scen: "DAISY_CHAIN", oper: "TIM", nameTpl: "{BANDA}_SEC{SEC2}_{PORTA}", secTpl: "S{SEC}-{PORTA}-{BANDA}-{OP}",
+  var DEF = { scen: "DAISY_CHAIN", oper: "TIM", nameTpl: "{BANDA}_SEC{SEC2}_{PORTA} ", secTpl: "S{SEC}-{PORTA}-{BANDA}-{OP}",
     thr: true, uo: 14, uc: 15, oo: 182, oc: 155, autoscan: true, wait: 20 };
   var MAXLEN = 32;
 
@@ -131,7 +131,8 @@
   }
 
   // ---------------------------------------------------------------- estado (por site, guardado neste navegador)
-  var G = Object.assign({}, DEF, lsGet(LS_G, {}));     // preferências gerais (modelos, limiares…)
+  var G = Object.assign({}, DEF, lsGet(LS_G, {}));
+  if (G.nameTpl === "{BANDA}_SEC{SEC2}_{PORTA}") G.nameTpl = DEF.nameTpl;     // preferências gerais (modelos, limiares…)
   var S = null;                                         // estado do site atual
   function blank(site) { return { site: site, scan: null, scanTs: "", existing: null, sec: {}, band: {}, ov: {}, bsid: "", start: "", portSel: {}, status: null }; }
   function load(site) { S = Object.assign(blank(site), lsGet(LS + site, {})); S.site = site; }
@@ -188,7 +189,7 @@
       else if (row.configured) row.no = "";
       else { while (used[next]) next++; row.no = String(next); used[next] = 1; next++; }
       var tk = { BANDA: band, SEC: String(secN), SEC2: pad2(secN), PORTA: sp.port, OP: G.oper || "", SITE: S.site };
-      row.autoName = tpl(G.nameTpl, tk, "_");
+      row.autoName = raw(G.nameTpl, tk);            // nome: igual ao comando de campo ("_SEC01_R1 ", "L1800_SEC01_Y1 ")
       row.name = o.name != null ? o.name : (row.exist && row.exist.name) || row.autoName;
       row.autoSec = [];
       for (var u = 1; u <= row.nsub; u++) row.autoSec.push(band && row.nsub === 1 ? tpl(G.secTpl, tk, "-") : "");
@@ -198,6 +199,7 @@
     });
     return { rows: rows, ants: ants, ports: pord.filter(Boolean) };
   }
+  function raw(t, tk) { return String(t || "").replace(/\{(\w+)\}/g, function (_, k) { return tk[k.toUpperCase()] != null ? tk[k.toUpperCase()] : ""; }); }
   function tpl(t, tk, sep) {
     var s = String(t || "").replace(/\{(\w+)\}/g, function (_, k) { return tk[k.toUpperCase()] != null ? tk[k.toUpperCase()] : ""; });
     var q = sep === "-" ? "\\-" : "_";
@@ -398,7 +400,7 @@
       '<label>BSID<input type="text" id="retBsid" value="' + esc(S.bsid || S.site) + '"></label>' +
       '<label>Nº inicial do RET (DEVICENO)<input type="number" id="retStart" min="0" value="' + esc(S.start) + '" placeholder="auto"></label>' +
       '<label>Cenário (SCENARIO)<select id="retScen"><option value="DAISY_CHAIN">DAISY_CHAIN (vários RET na mesma porta)</option><option value="REGULAR">REGULAR</option></select></label>' +
-      '</div><p class="muted" style="font-size:12px;margin:4px 0 0">Campos: <span class="mono">{BANDA} {SEC} {SEC2} {PORTA} {OP} {SITE}</span>. Campo vazio some junto com o separador (sem banda: <span class="mono">SEC01_R1</span>). Sector ID só sai quando a porta tem banda (ou digitado na linha).</p>';
+      '</div><p class="muted" style="font-size:12px;margin:4px 0 0">Campos: <span class="mono">{BANDA} {SEC} {SEC2} {PORTA} {OP} {SITE}</span>. No nome, campo vazio fica vazio e o espaço no fim é mantido, como no comando de campo (sem banda: <span class="mono">"_SEC01_R1 "</span>). Sector ID só sai quando a porta tem banda (ou digitado na linha).</p>';
     h += '<div class="ret-grp"><span class="l">Antena → setor</span>' + M.ants.map(function (a, i) {
       return '<label title="Antena ' + esc(a) + '">' + esc(a) + ' → SEC <input type="number" min="1" max="99" data-sec="' + esc(a) + '" value="' + esc(S.sec[a] || i + 1) + '"></label>';
     }).join("") + '</div>';
@@ -477,7 +479,7 @@
     if ((a = t.getAttribute("data-on")) != null) { r = M.rows[+a]; ovOf(r.serial).on = t.checked; }
     else if (t.id === "retAll") M.rows.forEach(function (r) { ovOf(r.serial).on = t.checked; });
     else if ((a = t.getAttribute("data-no")) != null) { r = M.rows[+a]; if (t.value) ovOf(r.serial).no = t.value; else delete ovOf(r.serial).no; }
-    else if ((a = t.getAttribute("data-name")) != null) { r = M.rows[+a]; if (t.value.trim() === r.autoName) delete ovOf(r.serial).name; else ovOf(r.serial).name = t.value.trim(); }
+    else if ((a = t.getAttribute("data-name")) != null) { r = M.rows[+a]; if (t.value === r.autoName) delete ovOf(r.serial).name; else ovOf(r.serial).name = t.value; }
     else if ((a = t.getAttribute("data-secid")) != null) {
       var p = a.split(":"); r = M.rows[+p[0]]; var o = ovOf(r.serial); o.sec = o.sec || [];
       o.sec[+p[1]] = t.value.trim() === r.autoSec[+p[1]] ? null : t.value.trim();
@@ -485,7 +487,7 @@
     else if ((a = t.getAttribute("data-sec")) != null) S.sec[a] = t.value;
     else if ((a = t.getAttribute("data-band")) != null) S.band[a] = t.value.trim().toUpperCase();
     else if ((a = t.getAttribute("data-port")) != null) { S.portSel[a] = t.checked; save(); renderPorts(); return; }
-    else if (t.id === "retNameTpl") G.nameTpl = t.value.trim() || DEF.nameTpl;
+    else if (t.id === "retNameTpl") G.nameTpl = t.value.trim() ? t.value : DEF.nameTpl;
     else if (t.id === "retSecTpl") G.secTpl = t.value.trim() || DEF.secTpl;
     else if (t.id === "retOper") G.oper = t.value.trim();
     else if (t.id === "retBsid") S.bsid = t.value.trim() === S.site ? "" : t.value.trim();
