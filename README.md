@@ -80,6 +80,8 @@ Caixa **RET — antenas AISG** no fim da aba (`js/ret_ald.js`). Lê respostas em
 `LST/DSP RETPORT`) ou do botão **↻ Ler RET e portas agora** (só esses 7 comandos):
 - portas RET: alimentação configurada e real (ON · ativa / OFF), corrente, tipo de limiar, sub/sobrecorrente, RET por porta;
 - RET cadastrados: nº, DEVICENAME, porta, serial, online, tilt, faixa de tilt, Sector ID, antena e bandas da antena.
+- **Remover RET** (troca de antena/RET): marque na coluna RMV → `RMV RET:DEVICENO=n;` + `LST/DSP RET`; depois recrie pela
+  varredura (2b) e cadastro (2c).
 
 **2 · Configurar**, na ordem de campo:
 - **a)** habilitar a porta RET da RRU: `MOD RETPORT ... PWRSWITCH=ON` (opcional `THRESHOLDTYPE=UER_SELF_DEFINE` com

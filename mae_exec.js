@@ -18,6 +18,7 @@
     { id: "modCmds",  after: "copyMod",    name: "Conexão física · comandos" },
     { id: "retCmds",  after: "retCopy",    name: "Conexão física · RET", guard: "ret", askOnFail: true },
     { id: "retPortCmds", after: "retPortCopy", name: "Conexão física · porta RET", askOnFail: true },
+    { id: "retRmvCmds", after: "retRmvCopy", name: "Conexão física · remover RET", askOnFail: true, label: "▶ Remover no site" },
     { id: "pwScript", after: "pwCopy",     name: "Potência · script" },
     { id: "pwRb",     after: "pwCopyRb",   name: "Potência · rollback", label: "▶ Executar rollback" },
     { id: "output",   after: "copy",       name: "Baseline · saída gerada", retry: true },

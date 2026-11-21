@@ -140,8 +140,8 @@
   var G = Object.assign({}, DEF, lsGet(LS_G, {}));
   if (G.nameTpl === "{BANDA}_SEC{SEC2}_{PORTA}") G.nameTpl = DEF.nameTpl;
   var S = null;
-  var KEEP = ["scan", "scanTs", "cur", "sec", "band", "ov", "bsid", "start", "portSel", "edN", "edS", "edT"];
-  function blank(site) { return { site: site, scan: null, scanTs: "", cur: {}, sec: {}, band: {}, ov: {}, bsid: "", start: "", portSel: {}, edN: {}, edS: {}, edT: {} }; }
+  var KEEP = ["scan", "scanTs", "cur", "sec", "band", "ov", "bsid", "start", "portSel", "edN", "edS", "edT", "rmv"];
+  function blank(site) { return { site: site, scan: null, scanTs: "", cur: {}, sec: {}, band: {}, ov: {}, bsid: "", start: "", portSel: {}, edN: {}, edS: {}, edT: {}, rmv: {} }; }
   function load(site) {
     var o = lsGet(LS + site, {}) || {};
     if (!o.cur) {                                       // formato anterior
@@ -462,7 +462,10 @@
       '<button class="ghost" type="button" id="retRead" title="' + esc(READ.join(" ")) + '">↻ Ler RET e portas agora</button></h3>' +
       '<div id="retReadMsg"></div>' +
       '<h4>Portas RET</h4><div id="retPortView"></div>' +
-      '<h4>RET cadastrados</h4><div id="retDevView"></div></div>' +
+      '<h4>RET cadastrados</h4><div id="retDevView"></div>' +
+      '<div id="retRmvBox" hidden><h4>Remover RET <span class="muted" style="font-weight:400;font-size:12px">(troca de antena/RET: remover e cadastrar de novo pela varredura no bloco 2)</span></h4>' +
+        '<pre class="ret-pre" id="retRmvCmds"></pre>' +
+        '<div class="ret-row"><button class="ghost" type="button" id="retRmvAll">Marcar todos</button><button class="ghost" type="button" id="retRmvNone">Desmarcar</button><button class="ghost" type="button" id="retRmvCopy">Copiar script</button></div><div id="retRmvMsg"></div></div></div>' +
 
     '<div class="ret-step" id="retStep2"><h3><span class="n">2</span>Configurar</h3>' +
       '<div class="ret-part first"><h4><span class="l">a</span>Habilitar a porta RET da RRU (alimentação e limiares)</h4>' +
@@ -502,7 +505,7 @@
     $("retSite").textContent = site || "nenhum site carregado";
     $("retTs").textContent = lastTs() ? "· lido em " + lastTs() : "";
     $("retScanTs").textContent = S.scanTs ? "última varredura: " + S.scanTs : "";
-    renderPortView(); renderDevView(); renderPorts(); renderScan(); renderCad(); renderEd(); renderScript();
+    renderPortView(); renderDevView(); renderRmv(); renderPorts(); renderScan(); renderCad(); renderEd(); renderScript();
   }
   function renderPortView() {
     var P = S.cur.ports;
@@ -531,18 +534,38 @@
   function renderDevView() {
     var D = devRows();
     if (!D.length) {
+      $("retRmvBox").hidden = true; $("retRmvCmds").textContent = "";
       $("retDevView").innerHTML = '<p class="muted" style="margin:2px 0 6px">' + (S.cur.lst || S.cur.ret ? "Nenhum RET cadastrado no site." : "Sem leitura: rode a Rodada 1 na aba Entrada ou clique em ↻ Ler RET e portas agora.") + '</p>';
       return;
     }
     var nOk = D.filter(ready).length;
     $("retDevView").innerHTML = '<div class="ret-msg ' + (nOk === D.length ? "ok" : "warn") + '" style="margin-top:2px">' + nOk + "/" + D.length + " RET online com tilt lido" +
       (nOk < D.length ? " · RET recém-cadastrado leva alguns segundos (SYSTEM_BUSY / ALD_DISCONNECTED): clique em ↻ Ler de novo." : "") + '</div>' +
-      '<div class="ret-tw"><table><thead><tr><th>Nº</th><th>DEVICENAME</th><th>Subunid.</th><th>Porta</th><th>Serial</th><th>Online</th><th>Tilt</th><th>Faixa de tilt</th><th>Sector ID</th><th>Antena</th><th>Bandas da antena</th><th>Falha</th></tr></thead><tbody>' +
+      '<div class="ret-tw"><table><thead><tr><th title="Marque para remover (RMV RET)">RMV</th><th>Nº</th><th>DEVICENAME</th><th>Subunid.</th><th>Porta</th><th>Serial</th><th>Online</th><th>Tilt</th><th>Faixa de tilt</th><th>Sector ID</th><th>Antena</th><th>Bandas da antena</th><th>Falha</th></tr></thead><tbody>' +
       D.map(function (r) {
-        return '<tr class="' + (ready(r) ? "" : "bad") + '"><td class="m">' + esc(r.no) + '</td><td class="m">' + esc(r.name) + '</td><td>' + esc(r.sub) + '</td><td class="m">' + esc(r.port) + '</td><td class="m">' + esc(r.serial) + '</td>' +
+        return '<tr class="' + (ready(r) ? "" : "bad") + '"><td>' + (r.first ? '<input type="checkbox" data-rmv="' + esc(r.no) + '"' + (S.rmv[r.no] ? " checked" : "") + '>' : "") + '</td><td class="m">' + esc(r.no) + '</td><td class="m">' + esc(r.name) + '</td><td>' + esc(r.sub) + '</td><td class="m">' + esc(r.port) + '</td><td class="m">' + esc(r.serial) + '</td>' +
           '<td>' + chipOnline(r.online) + '</td><td class="m r"><b>' + esc(deg(r.tilt)) + '</b></td><td class="m">' + (isInt(r.min) && isInt(r.max) ? esc(deg(r.min) + " a " + deg(r.max)) : "") + '</td>' +
           '<td class="m">' + esc(r.sec) + '</td><td class="m">' + esc([r.model, r.ant].filter(Boolean).join(" · ")) + '</td><td>' + esc(r.bands.join(" · ")) + '</td><td>' + esc([r.dfail, r.fail].filter(Boolean).join(" · ")) + '</td></tr>';
       }).join("") + '</tbody></table></div>';
+  }
+  function rmvScript() {
+    var nos = devRows().filter(function (r) { return r.first && S.rmv[r.no]; });
+    if (!nos.length) return "";
+    var L = ["// Remover RET — " + S.site + " · " + nos.length + " RET: " + nos.map(function (r) { return r.no + (r.name ? " " + r.name.trim() : ""); }).join(", ")];
+    nos.forEach(function (r) { L.push("RMV RET:DEVICENO=" + r.no + ";"); });
+    L.push("// Conferência (depois: varredura no bloco 2b para cadastrar de novo)");
+    L.push("LST RET:;");
+    L.push("DSP RET:;");
+    return L.join("\n");
+  }
+  function renderRmv() {
+    var D = devRows();
+    Object.keys(S.rmv).forEach(function (k) { if (!D.some(function (r) { return r.no === k; })) delete S.rmv[k]; });
+    $("retRmvBox").hidden = !D.length;
+    var t = rmvScript();
+    $("retRmvCmds").textContent = t;
+    $("retRmvMsg").innerHTML = t ? "" : '<p class="muted" style="margin:6px 0 0;font-size:12px">Marque na coluna RMV os RET a remover.</p>';
+    var b = $("mx-retRmvCmds"); if (b) b.disabled = !t;
   }
   function renderPorts() {
     $("retThr").checked = !!G.thr; $("retAuto").checked = !!G.autoscan;
@@ -663,6 +686,7 @@
       if (v === "" || isNaN(+v) || String(n10) === String(devOf(a).tilt)) delete S.edT[a]; else S.edT[a] = n10;
     }
     else if ((a = t.getAttribute("data-port")) != null) { S.portSel[a] = t.checked; save(); renderPorts(); return; }
+    else if ((a = t.getAttribute("data-rmv")) != null) { if (t.checked) S.rmv[a] = 1; else delete S.rmv[a]; save(); renderRmv(); return; }
     else if (t.id === "retNameTpl") G.nameTpl = t.value.trim() ? t.value : DEF.nameTpl;
     else if (t.id === "retSecTpl") G.secTpl = t.value.trim() || DEF.secTpl;
     else if (t.id === "retOper") G.oper = t.value.trim();
@@ -682,9 +706,14 @@
   });
   sec.addEventListener("click", function (e) {
     if (e.target.id === "retResetOv") { Object.keys(S.ov).forEach(function (k) { delete S.ov[k].name; delete S.ov[k].sec; }); save(); renderCad(); renderScript(); }
+    if (e.target.id === "retRmvAll" || e.target.id === "retRmvNone") {
+      S.rmv = {}; if (e.target.id === "retRmvAll") devRows().forEach(function (r) { if (r.first) S.rmv[r.no] = 1; });
+      save(); renderDevView(); renderRmv();
+    }
     if (e.target.id === "retEdReset") { S.edN = {}; S.edS = {}; S.edT = {}; save(); renderEd(); renderScript(); }
   });
   $("retCopy").onclick = function () { copyText($("retCmds").textContent, this); };
+  $("retRmvCopy").onclick = function () { copyText($("retRmvCmds").textContent, this); };
   $("retPortCopy").onclick = function () { copyText($("retPortCmds").textContent, this); };
   $("retPasteGo").onclick = function () {
     render();
@@ -794,6 +823,16 @@
       });
       if (cmds.length) apply(asText(cmds, resps), "após executar");
       save(); render();
+    }
+    if (d.id === "retRmvCmds") {
+      var gone = {};
+      its.filter(okIt).forEach(function (it) { var m = /^RMV\s+RET\s*:\s*DEVICENO\s*=\s*(\d+)/i.exec(it.cmd); if (m) gone[m[1]] = 1; });
+      ["lst", "ret", "sub", "dev", "ldev"].forEach(function (k) { if (S.cur[k]) S.cur[k].rows = S.cur[k].rows.filter(function (r) { return !gone[r.no]; }); });
+      Object.keys(gone).forEach(function (no) { delete S.rmv[no]; delete S.edN[no]; Object.keys(S.edS).concat(Object.keys(S.edT)).forEach(function (k) { if (k.split("|")[0] === no) { delete S.edS[k]; delete S.edT[k]; } }); });
+      if (S.scan) { S.scan.forEach(function (r) { if (r.cfg === "CONFIGURED") r.cfg = ""; }); }
+      if (cmds.length) apply(asText(cmds, resps), "após remover");
+      save(); render();
+      msg("retRmvMsg", d.ok ? "ok" : "warn", d.ok ? "✔ " + Object.keys(gone).length + " RET removido(s). Para recriar: varredura (2b) → cadastrar (2c)." : "⚠ A remoção não terminou: confira o bloco 1 (↻ Ler).");
     }
     if (d.id === "retPortCmds") {
       if (cmds.length) { apply(asText(cmds, resps), "após habilitar"); save(); render(); }
