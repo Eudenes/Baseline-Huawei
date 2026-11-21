@@ -4782,7 +4782,7 @@ IHN5PTA7d2hpbGUoc3k8Y3YuaGVpZ2h0KXtjb25zdCBzaD1NYXRoLm1pbihjdi5oZWlnaHQtc3ksTWF0
   var TABS = ["in", "sw", "ca", "pl", "ph", "pw", "bl", "doc", "rs", "rs4g", "s20", "s4g"];
   var CA_CMDS = ["DSP CELL:;", "LST EUTRANINTERNFREQ:;", "LST UTRANNFREQ:;", "LST EUTRANINTERFREQNCELL:;", "LST EUTRANEXTERNALCELL:;", "LST PCCFREQCFG:;", "LST SCCFREQCFG:;", "LST ENODEBFUNCTION:;", "LST GNODEBFUNCTION:;", "LST CNOPERATORTA:;", "LST GNBTRACKINGAREA:;"];
   var ALL_CMDS = (window.PL_TOOL.cmds || []).slice();
-  CA_CMDS.concat(["LST PDSCHCFG:;", "LST CELLDLPCPDSCHPA:;", "LST RET:;", "DSP RET:;", "DSP RETSUBUNIT:;", "LST RETPORT:;", "DSP RETPORT:;"]).forEach(function (c) { if (ALL_CMDS.indexOf(c) === -1) ALL_CMDS.push(c); });
+  CA_CMDS.concat(["LST PDSCHCFG:;", "LST CELLDLPCPDSCHPA:;", "LST RET:;", "DSP RET:;", "DSP RETSUBUNIT:;", "LST RETDEVICEDATA:;", "DSP RETDEVICEDATA:;", "LST RETPORT:;", "DSP RETPORT:;"]).forEach(function (c) { if (ALL_CMDS.indexOf(c) === -1) ALL_CMDS.push(c); });
   $("uniCmds").textContent = ALL_CMDS.join("\n");
 
   // ---------- abas ----------

@@ -208,15 +208,20 @@
   function isRetWait(it) { return /^DSP\s+(RET|RETSUBUNIT)\s*:/i.test(it.cmd); }
   // RET: repete o DSP RET / DSP RETSUBUNIT até todos os RET cadastrados neste script responderem (js/ret_ald.js decide)
   async function guardRet(it) {
-    var adds = items.filter(function (x) { return /^ADD\s+RET\s*:/i.test(x.cmd); });
-    var exp = adds.filter(function (x) { return x.st === "ok" || x.st === "rt"; }).map(function (x) {
-      return { no: (/DEVICENO\s*=\s*(\d+)/i.exec(x.cmd) || [])[1], serial: (/SERIALNO\s*=\s*"([^"]*)"/i.exec(x.cmd) || [])[1] || "" };
-    }).filter(function (e) { return e.no; });
-    if (adds.length && !exp.length) { it.st = "pd"; it.msg = "pulado: nenhum ADD RET deu certo"; setRow(it); return true; }
+    var touched = items.filter(function (x) { return x.idx < it.idx && /^(ADD|MOD)\s+RET(SUBUNIT|DEVICEDATA)?\s*:/i.test(x.cmd); });
+    var okT = touched.filter(function (x) { return x.st === "ok" || x.st === "rt"; }), seen = {}, exp = [], tilts = [];
+    okT.forEach(function (x) {
+      var no = (/DEVICENO\s*=\s*(\d+)/i.exec(x.cmd) || [])[1]; if (!no) return;
+      var sn = (/SERIALNO\s*=\s*"([^"]*)"/i.exec(x.cmd) || [])[1] || "";
+      if (!seen[no]) { seen[no] = { no: no, serial: sn }; exp.push(seen[no]); } else if (sn) seen[no].serial = sn;
+      var t = /^MOD\s+RETSUBUNIT\s*:.*TILT\s*=\s*(-?\d+)/i.exec(x.cmd);
+      if (t) tilts.push({ no: no, sub: (/SUBUNITNO\s*=\s*(\d+)/i.exec(x.cmd) || [])[1] || "1", tilt: t[1] });
+    });
+    if (touched.length && !exp.length) { it.st = "pd"; it.msg = "pulado: nenhum comando de RET deu certo"; setRow(it); return true; }
     for (var n = 1; ; n++) {
       var x = await runOne(it.cmd);
       it.resp += (it.resp ? "\n----- consulta " + n + " -----\n" : "") + (x.resp || "");
-      var r = window.RETALD ? window.RETALD.check(it.cmd, x.resp || "", exp) : { done: x.ok, msg: x.ok ? "" : retMsg(x.resp) };
+      var r = window.RETALD ? window.RETALD.check(it.cmd, x.resp || "", exp, tilts) : { done: x.ok, msg: x.ok ? "" : retMsg(x.resp) };
       if (r.done) { it.st = r.warn ? "er" : "ok"; it.msg = r.msg + (n > 1 ? " (" + n + "ª consulta)" : ""); setRow(it); return true; }
       it.st = "run"; it.msg = r.msg + " · consulta " + n + " · nova consulta em 8 s…"; setRow(it);
       if (n % 15 === 0 && !confirm("Os RET ainda não ficaram prontos em " + ne + " após " + n + " consultas (~" + Math.round(n * 8 / 60) + " min).\n" + r.msg + "\n\nOK = continuar esperando\nCancelar = decidir o que fazer")) {

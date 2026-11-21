@@ -73,24 +73,25 @@ python mml_helper_v2.py --port 8765               # outra porta local
 
 ## RET (aba Conexão física)
 
-Caixa **RET — antenas AISG** no fim da aba (`js/ret_ald.js`), na ordem do roteiro de campo:
+Caixa **RET — antenas AISG** no fim da aba (`js/ret_ald.js`). Lê respostas em tabela (horizontal) ou `Chave = valor`
+(vertical, quando há um resultado só).
 
-A Rodada 1 da aba Entrada inclui `LST RET`, `DSP RET`, `DSP RETSUBUNIT`, `LST RETPORT` e `DSP RETPORT`: ao processar,
-a caixa já mostra as **portas RET** (alimentação ON/OFF, estado, corrente, limiar) no passo 1, os RET cadastrados e a
-conferência (passo 3). O botão **↻ Ler RET e portas agora** relê só esses 5 comandos. O `SCN ALD` (demorado) só roda no botão.
+**1 · Situação atual** — vem da Rodada 1 da Entrada (`LST/DSP RET`, `DSP RETSUBUNIT`, `LST/DSP RETDEVICEDATA`,
+`LST/DSP RETPORT`) ou do botão **↻ Ler RET e portas agora** (só esses 7 comandos):
+- portas RET: alimentação configurada e real (ON · ativa / OFF), corrente, tipo de limiar, sub/sobrecorrente, RET por porta;
+- RET cadastrados: nº, DEVICENAME, porta, serial, online, tilt, faixa de tilt, Sector ID, antena e bandas da antena.
 
-1. **Varredura** — `SCN ALD:;` como tarefa no helper (v3.4+): mostra o %, só termina no `Status = Success`
-   e lê o `LST RET:;` para saber o que já está cadastrado. Sem helper, dá para colar a resposta.
-2. **Cadastro e Sector ID** — um `ADD RET` por RET achado (porta de controle, tipo, fabricante e serial da varredura).
-   Serial `06CB26410005XA-R1` → antena `CB26410005XA` (vira SEC01, SEC02… na ordem; editável) e porta `R1`.
-   Banda por porta da antena (ex.: Y1 = L1800). Nome `{BANDA}_SEC{SEC2}_{PORTA} ` (igual ao comando de campo: sem banda `"_SEC01_R1 "`, com banda `"L1800_SEC01_Y1 "`) e Sector ID
-   `S{SEC}-{PORTA}-{BANDA}-{OP}` (modelos editáveis; tudo editável na linha). Numeração por setor, sem repetir os já cadastrados.
-   No **▶ Executar no site**, o `DSP RET` e o `DSP RETSUBUNIT` depois dos ADD repetem sozinhos a cada 8 s até todos os RET
-   do script terem serial lido e subunidade `AVAILABLE` com tilt (sem `ALD_DISCONNECTED` / `SYSTEM_BUSY`); só então
-   entra o `MOD RETDEVICEDATA` (BSID = site).
-3. **Conferência** — tabela do `DSP RET` + `DSP RETSUBUNIT` (serial, online, tilt em graus, Sector ID).
-4. **Porta RET** — `MOD RETPORT ... PWRSWITCH=ON` (opcional `THRESHOLDTYPE=UER_SELF_DEFINE` com UOTHD/UCTHD/OOTHD/OCTHD),
-   `LST/DSP RETPORT`, espera N s e varre de novo sozinho.
+**2 · Configurar**, na ordem de campo:
+- **a)** habilitar a porta RET da RRU: `MOD RETPORT ... PWRSWITCH=ON` (opcional `THRESHOLDTYPE=UER_SELF_DEFINE` com
+  UOTHD/UCTHD/OOTHD/OCTHD) + `LST/DSP RETPORT`; vêm marcadas as portas desligadas; no fim espera N s e varre sozinho;
+- **b)** varredura `SCN ALD:;` (só no botão; tarefa no helper v3.4+, com %, termina no `Status = Success`);
+- **c)** cadastrar os RET novos: `ADD RET` com nome `{BANDA}_SEC{SEC2}_{PORTA} ` (sem banda `"_SEC01_R1 "`) e Sector ID
+  `S{SEC}-{PORTA}-{BANDA}-{OP}` (serial `06CB26410005XA-R1` → antena `CB26410005XA`, porta `R1`);
+- **d)** ajustar os já cadastrados: DEVICENAME (`MOD RET`), Sector ID (`MOD RETDEVICEDATA`, BSID = site) e tilt
+  (`MOD RETSUBUNIT ... TILT=` em 0,1°, validado na faixa do `DSP RETDEVICEDATA`).
+
+Um script só. No **▶ Executar no site**, os `DSP RET` / `DSP RETSUBUNIT` repetem a cada 8 s até os RET mexidos estarem
+conectados, `AVAILABLE` e no tilt pedido; no fim a leitura atualiza o bloco 1 e limpa os ajustes aplicados.
 
 ## RS_4G — etapa 0: TX VIVO (configurar e testar)
 
