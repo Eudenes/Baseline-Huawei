@@ -336,6 +336,33 @@ button.ghost:hover{ border-color: var(--accent); color: var(--accent); }
 .scB path.lk.ce{ stroke: #8A9A95; stroke-dasharray: 2 3; }
 .scB path.lk.hl{ stroke-width: 3.4; stroke-dasharray: none; }
 .scB path.lk.dim{ opacity: .08; }
+.scB .pport.bpt{ position: relative; padding-right: 30px; }
+.scB .pbtn{ position: absolute; right: 2px; top: 50%; transform: translateY(-50%); display: none; align-items: center; justify-content: center; min-width: 24px; height: 20px; border-radius: 4px; cursor: pointer; line-height: 1; }
+.scB .pport.bpt:hover .pbtn{ display: inline-flex; }
+.scB .pbtn.add{ background: #2F7D52; color: #fff; font-size: 16px; font-weight: 700; }
+.scB .pbtn.unplug{ background: #fff; color: #1F4E9A; box-shadow: 0 0 0 1px #9AA3B2; }
+.scB .pbtn:hover{ filter: brightness(1.12); box-shadow: 0 0 0 2px #E07B2B; }
+.scB #physStage.rewiring .pbtn{ display: none !important; }
+.scB #physStage.rewiring .pport.bpt.drop-ok{ outline: 2px dashed #2F7D52; outline-offset: 1px; cursor: copy; }
+.scB #physStage.rewiring .pport.bpt.drop-ok:hover{ background: #2F7D52; color: #fff; }
+.scB #physStage.rewiring .pport.bpt:not(.drop-ok){ opacity: .45; }
+.scB #physStage.rewiring, .scB #physStage.rewiring *{ cursor: crosshair; }
+.scB .pport.newch{ background: #2F7D52; }
+.scB .pport.movedch{ box-shadow: 0 0 0 2px #E07B2B; }
+.scB path.lk.rw{ stroke-dasharray: 6 4; }
+.scB path.lk.loose{ stroke-dasharray: none; }
+.scB path.lk.loose.new{ stroke: #2F7D52; }
+.scB svg.psvg g.plug rect{ fill: #E07B2B; }
+.scB svg.psvg g.plug path{ stroke: #8A4A12; stroke-width: 2; fill: none; }
+.scB svg.psvg g.plug.dim, .scB svg.psvg text.chlbl.dim{ opacity: .12; }
+.scB svg.psvg text.chlbl{ font: 700 10.5px Consolas, "Courier New", monospace; fill: #C2571A; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.scB #chainOpsBox .cho-h{ font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.scB #chainOpsBox .cho-r{ font-size: 12.5px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 3px 0; }
+.scB #chainOpsBox .cho-k{ font-size: 11px; font-weight: 700; color: #fff; border-radius: 3px; padding: 0 5px; }
+.scB #chainOpsBox .cho-k.new{ background: #2F7D52; } .scB #chainOpsBox .cho-k.mov{ background: #E07B2B; }
+.scB #chainOpsBox input.cho-no{ width: 4.5em; font-family: Consolas, monospace; padding: 2px 4px; }
+.scB #chainOpsBox input.cho-no.bad{ outline: 2px solid #C0392B; }
+.scB #chainOpsBox:not(:empty){ margin-bottom: 8px; }
 .scB .rsz-hint .xt-reorder{ padding: 3px 9px; font-size: 12px; margin-left: 6px; }
 .scB .grid th{ cursor: grab; user-select: none; }
 .scB .grid tbody td{ cursor: pointer; }
@@ -889,7 +916,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
 <div class="pane scB" id="pane-ph" role="tabpanel" aria-labelledby="tab-ph" hidden>
   <section class="phys" id="physSec">
     <h2>Conexão física — Placa → RRU/AAU → Sector → Sector Equipment → Célula</h2>
-    <p class="instr">Laranja = fibra (LST RRUCHAIN); RRU com RRU Position &gt; 0 aparece recuada logo abaixo e ligada na saída de cascata da RRU anterior da mesma chain — <strong>clique numa linha laranja</strong> para destacar a RRU Chain inteira. Portas de antena livres aparecem tracejadas (nº de portas pelo 4T4R/2T2R do DSP BRDMFRINFO). Azul tracejado = porta de antena RRU → SECTOR (DSP SECTOR). Verde = porta do SECTOR → porta do Sector Equipment (LST SECTOREQM). Cinza = Sector Equipment → célula (LTE/NB-IoT via LST EUCELLSECTOREQM/EUPRBSECTOREQM, UMTS via LST ULOCELLSECTOREQM, NR via NRDUCELLCOVERAGE). Chips no Sector Equipment = portas efetivamente usadas (LST SECTOREQM). <strong>Clique</strong> num item para destacar a cascata; <strong>arraste</strong> para mover; <strong>roda</strong> rola para baixo/cima, <strong>Shift+roda</strong> para os lados, <strong>Ctrl+roda</strong> zoom. Edite o <strong>RRU Name</strong> para gerar o MOD RRU.</p>
+    <p class="instr">Laranja = fibra (LST RRUCHAIN); RRU com RRU Position &gt; 0 aparece recuada logo abaixo e ligada na saída de cascata da RRU anterior da mesma chain — <strong>clique numa linha laranja</strong> para destacar a RRU Chain inteira. Portas de antena livres aparecem tracejadas (nº de portas pelo 4T4R/2T2R do DSP BRDMFRINFO). Azul tracejado = porta de antena RRU → SECTOR (DSP SECTOR). Verde = porta do SECTOR → porta do Sector Equipment (LST SECTOREQM). Cinza = Sector Equipment → célula (LTE/NB-IoT via LST EUCELLSECTOREQM/EUPRBSECTOREQM, UMTS via LST ULOCELLSECTOREQM, NR via NRDUCELLCOVERAGE). Chips no Sector Equipment = portas efetivamente usadas (LST SECTOREQM). <strong>Clique</strong> num item para destacar a cascata; <strong>arraste</strong> para mover; <strong>roda</strong> rola para baixo/cima, <strong>Shift+roda</strong> para os lados, <strong>Ctrl+roda</strong> zoom. Edite o <strong>RRU Name</strong> para gerar o MOD RRU. <strong>RRU Chain:</strong> o nº (RCN) aparece ao lado da fibra; passe o mouse numa porta da placa — <strong>tomada com X</strong> desconecta a ponta da chain (ela fica tracejada seguindo o mouse até você clicar numa porta livre, Esc cancela → MOD RRUCHAIN) e <strong>+</strong> numa porta livre cria uma chain nova (ADD RRUCHAIN). Chain sem RRU aparece com a tomadinha solta (a RRU se associa quando for criada). Porta de placa não liga em outra placa; RRU tem 2 portas (entrada e cascata).</p>
     <div class="navbar">
       <button class="ghost" type="button" id="zoomOut" title="Diminuir">−</button><span id="zoomPct">100%</span><button class="ghost" type="button" id="zoomIn" title="Aumentar">+</button>
       <button class="ghost" type="button" id="zoom100">100%</button><button class="ghost" type="button" id="zoomWidth">Ajustar largura</button>
@@ -899,6 +926,7 @@ body.cell-selecting, body.cell-selecting *{ cursor: cell !important; user-select
     <div id="physWrap"><div id="physStage"></div></div>
     <div class="msg" id="modWarn"></div>
     <div id="modBox" style="display:none; margin-top:12px;">
+      <div id="chainOpsBox"></div>
       <div class="cmd-block"><pre id="modCmds"></pre><button class="copy-btn" type="button" id="copyMod">Copiar comandos</button></div>
       <div class="row"><button class="ghost" type="button" id="resetEdits">Desfazer edições</button></div>
     </div>
@@ -2950,7 +2978,7 @@ window.CA_TOOL={
   });
   // ================= RESET =================
   window.PL_TOOL.reset = function () {
-    phys = null; nrCells = {}; rruEdits = {}; physDirty = true; xtReset("res"); xtReset("pt"); xtReset("d1"); xtReset("d2"); det1Ready = false; det2Ready = false;
+    phys = null; nrCells = {}; rruEdits = {}; chainOps = []; rewire = null; physDirty = true; xtReset("res"); xtReset("pt"); xtReset("d1"); xtReset("d2"); det1Ready = false; det2Ready = false;
     boards = {}; cells = {}; round1Done = false; round2Cmds = []; bbFilter = null;
     $("in1").value = ""; $("in2").value = "";
     ["msg1", "msg2", "exportMsg"].forEach(clearMsg);
@@ -3318,6 +3346,8 @@ window.CA_TOOL={
   });
   // ================= CONEXÃO FÍSICA (v10) =================
   var phys = null, physDirty = true, rruEdits = {}, nrCells = {}, pModel = null, physSel = null;
+  // edições de RRU Chain: [{ id, type: "mod"|"add", no, cab, srn, slot, port }] · rewire = chain sendo reconectada (ponta seguindo o mouse)
+  var chainOps = [], chainOpSeq = 0, rewire = null;
   var view = { s: 1, x: 0, y: 0 };
   var NR_BAND_FREQ = { "1": "2100", "2": "1900", "3": "1800", "5": "850", "7": "2600", "8": "900", "20": "800", "28": "700", "38": "2600 TDD",
     "40": "2300 TDD", "41": "2500 TDD", "66": "1700/2100", "71": "600", "77": "3700 TDD", "78": "3500 TDD", "79": "4700 TDD",
@@ -3479,6 +3509,80 @@ window.CA_TOOL={
   function physCells() {
     return sortedCells().filter(function (c) { return c.sectorEqms.length > 0; });
   }
+  function chainOpFor(no) { return chainOps.filter(function (o) { return String(o.no) === String(no); })[0] || null; }
+  // RRU Chain efetiva (já com as edições: chain movida de porta ou chain nova)
+  function chainOf(no) {
+    var c = phys && phys.chains[no], op = chainOpFor(no);
+    if (op && op.type === "add") return { no: String(op.no), cab: op.cab, srn: op.srn, slot: op.slot, port: op.port, topo: "CHAIN", proto: "", isNew: true, opId: op.id };
+    if (!c) return null;
+    if (op) return Object.assign({}, c, { cab: op.cab, srn: op.srn, slot: op.slot, port: op.port, moved: true, orig: c, opId: op.id });
+    return c;
+  }
+  function effChainNos() {
+    var out = phys ? Object.keys(phys.chains) : [];
+    chainOps.forEach(function (o) { if (o.type === "add" && out.indexOf(String(o.no)) < 0) out.push(String(o.no)); });
+    return out;
+  }
+  function usedChainNos() {
+    var u = {};
+    if (phys) { Object.keys(phys.chains).forEach(function (n) { u[n] = 1; }); Object.keys(phys.rrus).forEach(function (k) { u[String(phys.rrus[k].chain)] = 1; }); }
+    chainOps.forEach(function (o) { if (o.type === "add") u[String(o.no)] = 1; });
+    return u;
+  }
+  // nº sugerido para chain nova: primeiro buraco a partir da menor chain do site (ex.: 80, 82 → 81); sem buraco, a seguinte à maior
+  function nextChainNo() {
+    var u = usedChainNos(), ns = Object.keys(u).map(Number).filter(function (n) { return !isNaN(n); });
+    var lo = ns.length ? Math.min.apply(null, ns) : 0;
+    for (var i = lo; i < 250; i++) if (!u[String(i)]) return i;
+    for (i = 0; i < lo; i++) if (!u[String(i)]) return i;
+    return 250;
+  }
+  function portOwner(cab, srn, slot, port) { // nº da chain (efetiva) que ocupa a porta, ou null
+    var bk = rkey(cab, srn, slot), r = null;
+    effChainNos().forEach(function (no) { var c = chainOf(no); if (c && rkey(c.cab, c.srn, c.slot) === bk && String(c.port) === String(port)) r = no; });
+    return r;
+  }
+  function setChainPos(no, cab, srn, slot, port) {
+    var op = chainOpFor(no), c = phys.chains[no];
+    if (op && op.type === "add") { op.cab = cab; op.srn = srn; op.slot = slot; op.port = port; return; }
+    if (!c) return;
+    var same = rkey(c.cab, c.srn, c.slot) === rkey(cab, srn, slot) && String(c.port) === String(port);
+    if (same) { if (op) chainOps.splice(chainOps.indexOf(op), 1); return; }
+    if (op) { op.cab = cab; op.srn = srn; op.slot = slot; op.port = port; return; }
+    chainOps.push({ id: ++chainOpSeq, type: "mod", no: String(no), cab: cab, srn: srn, slot: slot, port: port });
+  }
+  function addChain(cab, srn, slot, port) {
+    chainOps.push({ id: ++chainOpSeq, type: "add", no: String(nextChainNo()), cab: cab, srn: srn, slot: slot, port: port });
+  }
+  function chainCmdFor(op) {
+    var cab = String(op.cab).trim();
+    if (op.type === "add") return ["ADD RRUCHAIN:RCN=" + op.no + ",TT=CHAIN,BM=COLD,AT=LOCALPORT," + (cab !== "0" && cab !== "" ? "HCN=" + cab + "," : "") + "HSRN=" + op.srn + ",HSN=" + op.slot + ",HPN=" + op.port + ",PROTOCOL=DEFAULT,CR=AUTO,USERDEFRATENEGOSW=OFF;"];
+    return ["MOD RRUCHAIN:RCN=" + op.no + ",BRKPOS1=0;",
+      "MOD RRUCHAIN:RCN=" + op.no + ",TT=CHAIN,AT=LOCALPORT,HCN=" + (cab || "0") + ",HSRN=" + op.srn + ",HSN=" + op.slot + ",HPN=" + op.port + ",BRKPOS1=255;"];
+  }
+  function chainOpBad(op) {
+    if (op.type !== "add") return "";
+    if (!/^\d+$/.test(String(op.no))) return "RCN inválido";
+    var dup = (phys && phys.chains[op.no]) || chainOps.some(function (o) { return o !== op && o.type === "add" && String(o.no) === String(op.no); }) ||
+      (phys && Object.keys(phys.rrus).some(function (k) { return String(phys.rrus[k].chain) === String(op.no); }));
+    return dup ? "RCN " + op.no + " já existe" : "";
+  }
+  // ordem de execução: cada comando só sai quando a porta de destino já foi liberada pelas chains que saem dela
+  function chainCmdsOrdered() {
+    var occ = {}, pend = chainOps.filter(function (o) { return !chainOpBad(o); }).slice(), out = [], cyc = false;
+    if (phys) Object.keys(phys.chains).forEach(function (no) { var c = phys.chains[no]; occ[rkey(c.cab, c.srn, c.slot) + "_" + c.port] = String(no); });
+    while (pend.length) {
+      var i = -1;
+      for (var j = 0; j < pend.length; j++) { var t = occ[rkey(pend[j].cab, pend[j].srn, pend[j].slot) + "_" + pend[j].port]; if (!t || t === String(pend[j].no)) { i = j; break; } }
+      if (i < 0) { cyc = true; i = 0; }
+      var op = pend.splice(i, 1)[0];
+      Object.keys(occ).forEach(function (pk) { if (occ[pk] === String(op.no)) delete occ[pk]; });
+      occ[rkey(op.cab, op.srn, op.slot) + "_" + op.port] = String(op.no);
+      out = out.concat(chainCmdFor(op));
+    }
+    return { cmds: out, cyc: cyc };
+  }
+  function chainPosTxt(c) { return "CN" + c.cab + "/SRN" + c.srn + "/SLOT" + c.slot + " porta " + c.port; }
   function buildModel() {
     var M = { nodes: {}, edges: [], fwd: {}, bwd: {} };
     function node(id, o) { o.id = id; M.nodes[id] = o; M.fwd[id] = []; M.bwd[id] = []; return o; }
@@ -3488,8 +3592,8 @@ window.CA_TOOL={
       if (M.fwd[a].indexOf(b) < 0) M.fwd[a].push(b);
       if (M.bwd[b].indexOf(a) < 0) M.bwd[b].push(a);
     }
-    Object.keys(phys.chains).forEach(function (no) {
-      var c = phys.chains[no], k = rkey(c.cab, c.srn, c.slot);
+    effChainNos().forEach(function (no) {
+      var c = chainOf(no), k = rkey(c.cab, c.srn, c.slot);
       var b = M.nodes["B:" + k] || node("B:" + k, { t: "B", k: k, cab: c.cab, srn: c.srn, slot: c.slot, ports: {} });
       b.ports[c.port] = c;
     });
@@ -3507,7 +3611,7 @@ window.CA_TOOL={
     var chainNos = {};
     Object.keys(phys.rrus).forEach(function (k) { chainNos[phys.rrus[k].chain] = 1; });
     Object.keys(chainNos).forEach(function (no) {
-      var list = chainRrus(no), c = phys.chains[no];
+      var list = chainRrus(no), c = chainOf(no);
       list.forEach(function (u, i) {
         var n = M.nodes["R:" + u.k];
         n.prev = i > 0 ? list[i - 1].k : null; n.next = i < list.length - 1 ? list[i + 1].k : null; n.idx = i;
@@ -3569,6 +3673,7 @@ window.CA_TOOL={
     var s = {}, k;
     if (/^CH:/.test(id)) { // RRU chain inteira: todas as RRUs da cadeia (cabeça + cascata) e o que elas alimentam
       chainRrus(id.slice(3)).forEach(function (u) { var c = cascade("R:" + u.k); for (k in c) s[k] = 1; });
+      var hc = chainOf(id.slice(3)); if (hc) s["B:" + rkey(hc.cab, hc.srn, hc.slot)] = 1;
       return s;
     }
     s[id] = 1;
@@ -3590,13 +3695,13 @@ window.CA_TOOL={
   function physBoardKeys() {
     if (!pModel) return [];
     var out = [];
-    pModel.order.R.forEach(function (rid) { var ch = phys.chains[pModel.nodes[rid].u.chain]; var k = ch ? rkey(ch.cab, ch.srn, ch.slot) : ""; if (out.indexOf(k) < 0) out.push(k); });
+    pModel.order.R.forEach(function (rid) { var ch = chainOf(pModel.nodes[rid].u.chain); var k = ch ? rkey(ch.cab, ch.srn, ch.slot) : ""; if (out.indexOf(k) < 0) out.push(k); });
     return out;
   }
   function physColorForBoardKey(bk) { var i = physBoardKeys().indexOf(bk); return PALETTE[(i < 0 ? 0 : i) % PALETTE.length]; }
-  function physColorForRru(u) { var ch = phys && phys.chains[u.chain]; return physColorForBoardKey(ch ? rkey(ch.cab, ch.srn, ch.slot) : ""); }
+  function physColorForRru(u) { var ch = phys && chainOf(u.chain); return physColorForBoardKey(ch ? rkey(ch.cab, ch.srn, ch.slot) : ""); }
   function modCmds() {
-    var out = [];
+    var out = chainCmdsOrdered().cmds.slice();
     Object.keys(rruEdits).forEach(function (k) {
       var u = phys && phys.rrus[k], v = rruEdits[k];
       if (!u || v === u.name || !validName(v)) return;
@@ -3606,14 +3711,19 @@ window.CA_TOOL={
   }
   function refreshMod() {
     var c = modCmds(), bad = Object.keys(rruEdits).filter(function (k) { return phys && phys.rrus[k] && !validName(rruEdits[k]); });
-    $("modBox").style.display = c.length ? "" : "none";
+    $("modBox").style.display = (c.length || chainOps.length) ? "" : "none";
     $("modCmds").textContent = c.join("\n");
-    $("modWarn").textContent = bad.length ? "Nome inválido (vazio, com aspas/ponto-e-vírgula ou > 64 caracteres) em: " + bad.map(function (k) { return phys.rrus[k].name; }).join(", ") : "";
-    $("modWarn").className = bad.length ? "msg warn" : "msg";
+    var warn = [];
+    if (bad.length) warn.push("Nome inválido (vazio, com aspas/ponto-e-vírgula ou > 64 caracteres) em: " + bad.map(function (k) { return phys.rrus[k].name; }).join(", "));
+    chainOps.forEach(function (o) { var b = chainOpBad(o); if (b) warn.push("Nova RRU Chain: " + b + " — escolha outro RCN."); });
+    if (chainCmdsOrdered().cyc) warn.push("Troca circular de portas entre RRU Chains: os comandos não conseguem liberar a porta antes de ocupar. Passe uma das chains por uma porta livre.");
+    $("modWarn").textContent = warn.join(" · ");
+    $("modWarn").className = warn.length ? "msg warn" : "msg";
+    renderChainOps();
   }
-  function renderPhys() {
+  function renderPhys(keepView) {
     var stage = $("physStage");
-    pModel = null; physSel = null;
+    pModel = null; physSel = null; rewire = null;
     if (!phys || (!Object.keys(phys.rrus).length && !Object.keys(phys.chains).length && !Object.keys(boards).some(function (bk) { return isBbpBoard(boards[bk]); }))) {
       stage.innerHTML = '<p class="empty-note" style="padding:16px">Inclua LST RRUCHAIN, LST RRU, DSP SECTOR e LST SECTOREQM na rodada 1 para montar o diagrama.</p>';
       $("modBox").style.display = "none"; $("ptWrap").innerHTML = ""; $("physSelInfo").textContent = "";
@@ -3633,15 +3743,17 @@ window.CA_TOOL={
       if (isBbpBoard(bd) || !(bd.mfrType || bd.configType)) for (var pi = 0; pi < 6; pi++) if (pl.indexOf(String(pi)) < 0) pl.push(String(pi));
       pl.sort(function (x, y) { return +x - +y; }).forEach(function (p) {
         var c = b.ports[p];
-        if (!c) { h.push('<div class="pport r free" data-n="bp:' + E(b.k + "_" + p) + '">Porta ' + E(p) + ' <span class="pt">livre</span></div>'); return; }
-        h.push('<div class="pport r" data-n="bp:' + E(b.k + "_" + p) + '">Porta ' + E(p) + ' <span class="pt">' + (c.proto === "eCPRI" ? "eCPRI" : "CPRI") + " · ch " + E(c.no) + "</span></div>");
+        if (!c) { h.push('<div class="pport r free bpt" data-n="bp:' + E(b.k + "_" + p) + '">Porta ' + E(p) + ' <span class="pt">livre</span>' +
+          '<span class="pbtn add" data-act="add" title="Criar RRU Chain nesta porta (ADD RRUCHAIN)">+</span></div>'); return; }
+        h.push('<div class="pport r bpt' + (c.isNew ? " newch" : (c.moved ? " movedch" : "")) + '" data-n="bp:' + E(b.k + "_" + p) + '">Porta ' + E(p) + ' <span class="pt">' + (c.isNew ? "nova" : (c.proto === "eCPRI" ? "eCPRI" : "CPRI")) + " · ch " + E(c.no) + "</span>" +
+          '<span class="pbtn unplug" data-act="unplug" data-ch="' + E(c.no) + '" title="Desconectar esta ponta da RRU Chain ' + E(c.no) + ' e ligar em outra porta">' + UNPLUG_SVG + "</span></div>");
       });
       h.push("</div>");
     });
     h.push("</div>");
     col0("RRU / AAU", M.order.R.length);
     M.order.R.forEach(function (id) {
-      var rn = M.nodes[id], u = rn.u, cur = rruEdits[u.k] !== undefined ? rruEdits[u.k] : u.name, ch = phys.chains[u.chain], mdl = rruModel(u), tr = rruTR(u);
+      var rn = M.nodes[id], u = rn.u, cur = rruEdits[u.k] !== undefined ? rruEdits[u.k] : u.name, ch = chainOf(u.chain), mdl = rruModel(u), tr = rruTR(u);
       var proto = ch ? (ch.proto === "eCPRI" ? "eCPRI" : "CPRI") : "";
       var prevU = rn.prev ? phys.rrus[rn.prev] : null, nextU = rn.next ? phys.rrus[rn.next] : null;
       var inTxt = prevU ? "in · cascata ← Pos " + E(prevU.pos) + " (" + E(rruEdits[prevU.k] || prevU.name) + ")" : (ch ? "in · " + proto : "sem cadeia");
@@ -3651,6 +3763,7 @@ window.CA_TOOL={
         (mdl ? "" : '<br><span class="tag-warn">modelo: rode a rodada 2</span>') + "</div>" +
         '<label class="pc-l">RRU Name<input class="rn' + (cur !== u.name ? " edited" : "") + '" data-k="' + E(u.k) + '" value="' + E(cur) + '"></label>');
       if (nextU) h.push('<div class="pport l casc" data-n="ro:' + E(u.k) + '">out · cascata → Pos ' + E(nextU.pos) + " (" + E(rruEdits[nextU.k] || nextU.name) + ")</div>");
+      else h.push('<div class="pport l free" data-n="ro:' + E(u.k) + '">out · cascata <span class="pt">livre</span></div>');
       rruAllPorts(u).forEach(function (p) {
         var used = u.ports.indexOf(p) >= 0;
         h.push('<div class="pport r ant' + (used ? "" : " free") + '" data-n="ra:' + E(u.k + "|" + p) + '">' + E(p) + (used ? "" : ' <span class="pt">livre</span>') + "</div>");
@@ -3707,6 +3820,7 @@ window.CA_TOOL={
     });
     refreshMod();
     renderPhysTable();
+    if (keepView === true) { requestAnimationFrame(function () { drawLinks(); applySel(); }); return; }
     physNeedFit = true;
     requestAnimationFrame(function () { drawLinks(); if ($("physStage").offsetWidth) { fitWidth(); physNeedFit = false; } applySel(); });
   }
@@ -3717,10 +3831,11 @@ window.CA_TOOL={
     svg.setAttribute("width", st.offsetWidth); svg.setAttribute("height", st.offsetHeight);
     var idx = {};
     st.querySelectorAll("[data-n]").forEach(function (el) { idx[el.getAttribute("data-n")] = el; });
-    var paths = [];
+    var paths = [], labels = [], rwNo = rewire ? String(rewire.no) : null;
     pModel.edges.forEach(function (l) {
       var a = idx[l.pa], b = idx[l.pb];
       if (!a || !b) return;
+      if (rwNo !== null && String(l.chain) === rwNo && !/\bcasc\b/.test(l.cls)) return; // ponta solta: desenhada seguindo o mouse
       var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
       var d, y1 = (ra.top + ra.height / 2 - sr.top) / s, y2 = (rb.top + rb.height / 2 - sr.top) / s;
       if (/\bcasc\b/.test(l.cls)) { // cascata: da saída da RRU de cima para a entrada da RRU de baixo, pela esquerda
@@ -3732,13 +3847,86 @@ window.CA_TOOL={
       }
       var chA = l.chain !== undefined ? ' data-chain="' + escapeHtml(l.chain) + '"' : "";
       if (chA) paths.push('<path class="lkhit"' + chA + ' d="' + d + '"><title>RRU Chain ' + escapeHtml(l.chain) + " — clique para destacar a cadeia</title></path>");
-      paths.push('<path class="lk ' + l.cls + '"' + chA + ' data-a="' + escapeHtml(l.a) + '" data-b="' + escapeHtml(l.b) + '" d="' + d + '"/>');
+      paths.push('<path class="lk ' + l.cls + (rwNo !== null && String(l.chain) === rwNo ? " rw" : "") + '"' + chA + ' data-a="' + escapeHtml(l.a) + '" data-b="' + escapeHtml(l.b) + '" d="' + d + '"/>');
+      if (chA && !/\bcasc\b/.test(l.cls)) labels.push(chainLabel(l.chain, x1 + 8, y1 - 5, l.a, l.b));
     });
-    svg.innerHTML = paths.join("");
+    // RRU Chain sem RRU: fio com a ponta solta (tomadinha)
+    effChainNos().forEach(function (no) {
+      if (rwNo === String(no) || chainRrus(no).length) return;
+      var c = chainOf(no), el = c && idx["bp:" + rkey(c.cab, c.srn, c.slot) + "_" + c.port];
+      if (!el) return;
+      var r = el.getBoundingClientRect(), x1 = (r.right - sr.left) / s, y1 = (r.top + r.height / 2 - sr.top) / s, nb = "B:" + rkey(c.cab, c.srn, c.slot);
+      var d = "M" + x1 + "," + y1 + " C" + (x1 + 25) + "," + y1 + " " + (x1 + 30) + "," + (y1 + 10) + " " + (x1 + 52) + "," + (y1 + 10);
+      paths.push('<path class="lkhit" data-chain="' + escapeHtml(no) + '" d="' + d + '"><title>RRU Chain ' + escapeHtml(no) + " — ponta solta (a RRU se associa quando for criada)</title></path>");
+      paths.push('<path class="lk fo loose' + (c.isNew ? " new" : "") + '" data-chain="' + escapeHtml(no) + '" data-a="' + nb + '" data-b="' + nb + '" d="' + d + '"/>');
+      paths.push(plugSvg(x1 + 52, y1 + 10, "loose", nb));
+      labels.push(chainLabel(no, x1 + 8, y1 - 5, nb, nb));
+    });
+    paths.push('<g id="rwLayer"></g>');
+    svg.innerHTML = paths.concat(labels).join("");
+    drawRewire();
+  }
+  var UNPLUG_SVG = '<svg viewBox="0 0 24 20" width="22" height="18" aria-hidden="true"><path d="M1 10h6" stroke="currentColor" stroke-width="2" fill="none"/><rect x="7" y="4" width="8" height="12" rx="2" fill="currentColor"/><path d="M15 7h5M15 13h5" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="4.5" r="4.2" fill="#C0392B" stroke="#fff" stroke-width="1"/><path d="M16.2 2.7l3.6 3.6M19.8 2.7l-3.6 3.6" stroke="#fff" stroke-width="1.4"/></svg>';
+  // tomadinha na ponta solta do fio (x,y = ponta do cabo; plugue apontando para a direita)
+  function plugSvg(x, y, cls, nb) {
+    return '<g class="plug ' + (cls || "") + '"' + (nb ? ' data-a="' + nb + '" data-b="' + nb + '"' : "") + ' transform="translate(' + x + "," + y + ')"><rect x="0" y="-6" width="11" height="12" rx="2.5"/><path d="M11 -3h6M11 3h6"/></g>';
+  }
+  function chainLabel(no, x, y, a, b) {
+    return '<text class="chlbl" data-a="' + escapeHtml(a) + '" data-b="' + escapeHtml(b) + '" x="' + x + '" y="' + y + '">RCN ' + escapeHtml(no) + "</text>";
+  }
+  // reconexão: a ponta da placa fica seguindo o mouse até clicar numa porta livre de placa
+  function stagePt(cx, cy) { var sr = $("physStage").getBoundingClientRect(); return { x: (cx - sr.left) / view.s, y: (cy - sr.top) / view.s }; }
+  function drawRewire() {
+    var layer = document.getElementById("rwLayer"); if (!layer) return;
+    if (!rewire || !rewire.mouse) { layer.innerHTML = ""; return; }
+    var st = $("physStage"), sr = st.getBoundingClientRect(), s = view.s, m = stagePt(rewire.mouse.x, rewire.mouse.y), d, us = chainRrus(rewire.no);
+    var tgt = us.length ? st.querySelector('[data-n="ri:' + cssEsc(us[0].k) + '"]') : null;
+    if (tgt) {
+      var r = tgt.getBoundingClientRect(), x2 = (r.left - sr.left) / s, y2 = (r.top + r.height / 2 - sr.top) / s, dx = Math.max(30, Math.abs(x2 - m.x) / 2);
+      d = "M" + (m.x + 17) + "," + m.y + " C" + (m.x + 17 + dx) + "," + m.y + " " + (x2 - dx) + "," + y2 + " " + x2 + "," + y2;
+      layer.innerHTML = '<path class="lk fo rw live" d="' + d + '"/>' + '<g class="plug live" transform="translate(' + (m.x + 17) + "," + m.y + ') scale(-1,1)"><rect x="0" y="-6" width="11" height="12" rx="2.5"/><path d="M11 -3h6M11 3h6"/></g>' +
+        '<text class="chlbl" x="' + (m.x + 22) + '" y="' + (m.y - 10) + '">RCN ' + escapeHtml(rewire.no) + "</text>";
+    } else {
+      d = "M" + (m.x - 52) + "," + (m.y - 10) + " C" + (m.x - 30) + "," + (m.y - 10) + " " + (m.x - 25) + "," + m.y + " " + m.x + "," + m.y;
+      layer.innerHTML = '<path class="lk fo rw live" d="' + d + '"/>' + plugSvg(m.x, m.y, "live") + '<text class="chlbl" x="' + (m.x - 50) + '" y="' + (m.y - 16) + '">RCN ' + escapeHtml(rewire.no) + "</text>";
+    }
+  }
+  function cssEsc(v) { return window.CSS && CSS.escape ? CSS.escape(v) : String(v).replace(/["\\]/g, "\\$&"); }
+  function startRewire(no, ev) {
+    rewire = { no: String(no), mouse: ev ? { x: ev.clientX, y: ev.clientY } : null };
+    var st = $("physStage"); st.classList.add("rewiring");
+    st.querySelectorAll(".pport.bpt").forEach(function (el) {
+      var p = parseBp(el.getAttribute("data-n")), own = p && portOwner(p.cab, p.srn, p.slot, p.port);
+      el.classList.toggle("drop-ok", !!p && (own === null || String(own) === String(no)));
+    });
+    $("physSelInfo").textContent = "RRU Chain " + no + ": clique numa porta livre de placa (verde) para ligar a ponta · Esc ou clique fora para cancelar.";
+    drawLinks();
+  }
+  function endRewire(target) {
+    if (!rewire) return;
+    var el = target && target.closest && target.closest(".pport.bpt.drop-ok"), no = rewire.no;
+    rewire = null;
+    var st = $("physStage"); st.classList.remove("rewiring");
+    st.querySelectorAll(".drop-ok").forEach(function (x) { x.classList.remove("drop-ok"); });
+    if (el) { var p = parseBp(el.getAttribute("data-n")); setChainPos(no, p.cab, p.srn, p.slot, p.port); renderPhys(true); }
+    else { drawLinks(); applySel(); }
+  }
+  function parseBp(n) { var m = /^bp:(.*)_(.*)_(.*)_(.*)$/.exec(n || ""); return m ? { cab: m[1], srn: m[2], slot: m[3], port: m[4] } : null; }
+  function renderChainOps() {
+    var box = $("chainOpsBox"); if (!box) return;
+    if (!chainOps.length) { box.innerHTML = ""; return; }
+    var E = escapeHtml;
+    box.innerHTML = '<div class="cho-h">Edições de RRU Chain</div>' + chainOps.map(function (o) {
+      var bad = chainOpBad(o);
+      if (o.type === "add") return '<div class="cho-r"><span class="cho-k new">nova</span> RRU Chain <label>RCN <input class="cho-no' + (bad ? " bad" : "") + '" data-id="' + o.id + '" value="' + E(o.no) + '" size="4"></label> em ' + E(chainPosTxt(o)) +
+        ' <span class="muted">— ponta livre até criar a RRU</span>' + (bad ? ' <span class="tag-warn">' + E(bad) + "</span>" : "") + ' <button class="ghost sm" type="button" data-undo="' + o.id + '">remover</button></div>';
+      var c = phys.chains[o.no];
+      return '<div class="cho-r"><span class="cho-k mov">mover</span> RRU Chain ' + E(o.no) + ": " + E(c ? chainPosTxt(c) : "?") + " → <b>" + E(chainPosTxt(o)) + '</b> <button class="ghost sm" type="button" data-undo="' + o.id + '">desfazer</button></div>';
+    }).join("");
   }
   function nodeLabel(id) {
     if (/^CH:/.test(id)) {
-      var no = id.slice(3), c = phys.chains[no], us = chainRrus(no);
+      var no = id.slice(3), c = chainOf(no), us = chainRrus(no);
       return "RRU Chain " + no + (c ? " (CN" + c.cab + "/SRN" + c.srn + "/SLOT" + c.slot + " porta " + c.port + ")" : "") + " · " + us.map(function (u) { return "Pos " + u.pos + " " + (rruEdits[u.k] || u.name); }).join(" → ");
     }
     var n = pModel.nodes[id]; if (!n) return id;
@@ -3756,7 +3944,8 @@ window.CA_TOOL={
       el.classList.toggle("sel", !!set && !!set[id]); el.classList.toggle("dim", !!set && !set[id]);
       el.classList.toggle("focus", id === physSel || (!!chSel && pModel.nodes[id] && pModel.nodes[id].t === "R" && String(pModel.nodes[id].u.chain) === chSel));
     });
-    st.querySelectorAll("path.lk").forEach(function (p) {
+    st.querySelectorAll("path.lk, g.plug, text.chlbl").forEach(function (p) {
+      if (!p.hasAttribute("data-a")) return;
       var on = !!set && !!set[p.getAttribute("data-a")] && !!set[p.getAttribute("data-b")];
       p.classList.toggle("hl", on); p.classList.toggle("dim", !!set && !on);
     });
@@ -3782,6 +3971,7 @@ window.CA_TOOL={
   function applyView() {
     $("physStage").style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.s + ")";
     $("zoomPct").textContent = Math.round(view.s * 100) + "%";
+    if (rewire) drawRewire();
   }
   function zoomAt(f, cx, cy) {
     var ns = Math.min(3, Math.max(0.1, view.s * f));
@@ -3803,11 +3993,12 @@ window.CA_TOOL={
   function setupNav() {
     var w = $("physWrap"), drag = null;
     w.addEventListener("mousedown", function (e) {
-      if (e.button !== 0 || e.target.closest("input,button,textarea,select")) return;
+      if (e.button !== 0 || e.target.closest("input,button,textarea,select,.pbtn")) return;
       drag = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y, moved: false };
       w.classList.add("grabbing"); e.preventDefault();
     });
     window.addEventListener("mousemove", function (e) {
+      if (rewire) { rewire.mouse = { x: e.clientX, y: e.clientY }; drawRewire(); }
       if (!drag) return;
       var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
@@ -3816,7 +4007,7 @@ window.CA_TOOL={
     window.addEventListener("mouseup", function (e) {
       if (!drag) return;
       w.classList.remove("grabbing");
-      if (!drag.moved) handlePhysClick(e.target);
+      if (!drag.moved) { if (rewire) endRewire(e.target); else handlePhysClick(e.target); }
       drag = null;
     });
     // Roda: rola para baixo/cima · Shift+roda: lateral · Ctrl+roda (ou pinça do touchpad): zoom
@@ -3843,9 +4034,32 @@ window.CA_TOOL={
       $("zoomFull").textContent = document.fullscreenElement ? "Sair da tela cheia" : "Tela cheia";
       setTimeout(fitAll, 120);
     });
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && physSel) { physSel = null; applySel(); } });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape") return;
+      if (rewire) { endRewire(null); return; }
+      if (physSel) { physSel = null; applySel(); }
+    });
+    $("physStage").addEventListener("click", function (e) {
+      var b = e.target.closest(".pbtn"); if (!b || !phys) return;
+      e.stopPropagation();
+      if (rewire) { endRewire(b); return; }
+      var p = parseBp((b.closest("[data-n]") || {}).getAttribute ? b.closest("[data-n]").getAttribute("data-n") : "");
+      if (b.getAttribute("data-act") === "add" && p) { addChain(p.cab, p.srn, p.slot, p.port); renderPhys(true); }
+      else if (b.getAttribute("data-act") === "unplug") startRewire(b.getAttribute("data-ch"), e);
+    });
+    $("chainOpsBox").addEventListener("click", function (e) {
+      var u = e.target.closest("[data-undo]"); if (!u) return;
+      var id = +u.getAttribute("data-undo");
+      chainOps = chainOps.filter(function (o) { return o.id !== id; });
+      renderPhys(true);
+    });
+    $("chainOpsBox").addEventListener("change", function (e) {
+      var inp = e.target.closest("input.cho-no"); if (!inp) return;
+      var op = chainOps.filter(function (o) { return o.id === +inp.getAttribute("data-id"); })[0];
+      if (op) { op.no = inp.value.trim(); renderPhys(true); }
+    });
     $("copyMod").addEventListener("click", function (e) { copyText(modCmds().join("\n"), e.target); });
-    $("resetEdits").addEventListener("click", function () { rruEdits = {}; renderPhys(); });
+    $("resetEdits").addEventListener("click", function () { rruEdits = {}; chainOps = []; renderPhys(true); });
     $("ptFilter").addEventListener("input", renderPhysTable);
     $("ptExport").addEventListener("click", exportPhysCsv);
     $("ptClear").addEventListener("click", function () { xtReset("pt", true); $("ptFilter").value = ""; renderPhysTable(); });
@@ -3856,7 +4070,7 @@ window.CA_TOOL={
     if (!pModel) return [];
     var M = pModel, out = [];
     M.order.R.forEach(function (rid) {
-      var u = M.nodes[rid].u, ch = phys.chains[u.chain], bd = ch ? (boards[key(ch.cab, ch.srn, ch.slot)] || {}) : {};
+      var u = M.nodes[rid].u, ch = chainOf(u.chain), bd = ch ? (boards[key(ch.cab, ch.srn, ch.slot)] || {}) : {};
       var name = rruEdits[u.k] !== undefined ? rruEdits[u.k] : u.name;
       var base = { _b: ch ? rkey(ch.cab, ch.srn, ch.slot) : "", _r: u.k,
         "Placa": ch ? "CN" + ch.cab + "/SRN" + ch.srn + "/SLOT" + ch.slot : "", "Modelo placa": bd.mfrType || bd.configType || "",
@@ -3933,8 +4147,12 @@ window.CA_TOOL={
     applySel();
   };
   window.PL_TOOL.hasPhys = function () { return !!pModel; };
-  window.PL_TOOL.getRru = function () { return JSON.parse(JSON.stringify(rruEdits)); };
-  window.PL_TOOL.setRru = function (o) { rruEdits = o || {}; physDirty = true; renderConsolidated(); };
+  window.PL_TOOL.getRru = function () { var o = JSON.parse(JSON.stringify(rruEdits)); if (chainOps.length) o.__chains = JSON.parse(JSON.stringify(chainOps)); return o; };
+  window.PL_TOOL.setRru = function (o) {
+    o = Object.assign({}, o || {}); chainOps = Array.isArray(o.__chains) ? o.__chains : []; delete o.__chains;
+    chainOpSeq = chainOps.reduce(function (m, x) { return Math.max(m, +x.id || 0); }, 0);
+    rruEdits = o; physDirty = true; renderConsolidated();
+  };
   window.PL_TOOL.cellIds = function () {
     var cl = sortedCells();
     return { lte: cl.filter(function (c) { return cellTech(c) === "LTE"; }).map(function (c) { return c.localCellId; }),
